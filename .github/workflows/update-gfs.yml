@@ -1,0 +1,88 @@
+name: Update GFS forecast
+
+# NOAA publishes GFS runs at 00/06/12/18 UTC and they're usable ~5h later,
+# so we fire 15 min after that window opens. Manual trigger is always available.
+on:
+  schedule:
+    - cron: '15 5,11,17,23 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: update-gfs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libeccodes-dev
+
+      - name: Install Python deps
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r data/scripts/requirements.txt
+
+      - name: Download GFS GRIBs
+        run: bash data/scripts/download-gfs.sh
+
+      - name: Process to downsampled .bin
+        run: python3 data/scripts/process-grib.py gfs
+
+      - name: Capture run id
+        id: run
+        run: |
+          RUN_ID=$(ls -1d data/gfs/*/ | sort -r | head -1 | xargs -n1 basename)
+          FILE_COUNT=$(ls data/gfs/$RUN_ID/*.bin | wc -l)
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Run: $RUN_ID ($FILE_COUNT .bin files)"
+          if [ "$FILE_COUNT" -lt 100 ]; then
+            echo "::error::Only $FILE_COUNT files processed; aborting."
+            exit 1
+          fi
+
+      - name: Tarball
+        run: |
+          RUN_ID=${{ steps.run.outputs.run_id }}
+          tar -czf "/tmp/gfs-${RUN_ID}.tar.gz" -C "data/gfs/${RUN_ID}" .
+          ls -lh "/tmp/gfs-${RUN_ID}.tar.gz"
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Upload tarball to Fly via SSH stdin
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          RUN_ID=${{ steps.run.outputs.run_id }}
+          flyctl ssh console -a isitgood-surf \
+            -C "sh -c 'mkdir -p /app/data/uploads && cat > /app/data/uploads/gfs-${RUN_ID}.tar.gz'" \
+            < "/tmp/gfs-${RUN_ID}.tar.gz"
+
+      - name: Atomic swap on Fly
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          RUN_ID=${{ steps.run.outputs.run_id }}
+          flyctl ssh console -a isitgood-surf \
+            -C "bash /app/data/scripts/receive-run.sh gfs-${RUN_ID}.tar.gz ${RUN_ID} gfs"
+
+      - name: Verify new run is live
+        run: |
+          RUN_ID=${{ steps.run.outputs.run_id }}
+          for i in $(seq 1 10); do
+            LATEST=$(curl -s https://isitgood-surf.fly.dev/api/latest/gfs | grep -o '"run":"[^"]*"' | cut -d'"' -f4)
+            if [ "$LATEST" = "$RUN_ID" ]; then
+              echo "Live: $LATEST"
+              exit 0
+            fi
+            echo "Waiting for $RUN_ID to go live (currently $LATEST)..."
+            sleep 3
+          done
+          echo "::error::New run did not go live in time"
+          exit 1

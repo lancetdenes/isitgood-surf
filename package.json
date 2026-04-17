@@ -1,0 +1,20 @@
+{
+  "name": "crowdsurf-v3",
+  "version": "3.0.0",
+  "description": "CrowdSurf — Windy-style surf forecast from locally-hosted GFS/ECMWF data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node data/scripts/generate-demo.js && node server.js",
+    "download:gfs": "bash data/scripts/download-gfs.sh",
+    "download:ecmwf": "bash data/scripts/download-ecmwf.sh",
+    "process": "python3 data/scripts/process-grib.py",
+    "update": "bash data/scripts/update.sh",
+    "update:gfs": "bash data/scripts/update.sh gfs",
+    "update:ecmwf": "bash data/scripts/update.sh ecmwf"
+  },
+  "dependencies": {
+    "compression": "^1.8.1",
+    "express": "^5.1.0"
+  }
+}

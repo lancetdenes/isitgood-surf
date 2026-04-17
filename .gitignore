@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Dynamic data (populated by GitHub Actions / Fly volume)
+data/gfs/
+data/ecmwf/
+data/grib/
+data/uploads/
+*.bin
+*.grib2
+*.idx
+
+# macOS
+.DS_Store
+
+# Env / local config
+.env
+.env.local

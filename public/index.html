@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Is It Good? — Surf Forecast</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Particle canvases (overlaid on map) -->
+  <canvas id="wind-canvas"></canvas>
+  <canvas id="swell-canvas"></canvas>
+
+  <!-- Top bar -->
+  <header class="top-bar">
+    <div class="logo">
+      <span class="logo-text" id="site-name">Is It Good?</span>
+    </div>
+
+    <div class="controls-group">
+      <div class="btn-group" id="model-selector">
+        <button class="ctrl-btn active" data-model="gfs">GFS</button>
+        <button class="ctrl-btn" data-model="ecmwf">ECMWF</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="btn-group" id="layer-selector">
+        <button class="ctrl-btn active" data-layer="wind">Wind</button>
+        <button class="ctrl-btn" data-layer="swell">Swell</button>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">Click coast for surf rating</div>
+    <div class="status" id="status">Loading...</div>
+  </header>
+
+  <!-- Timeline bar -->
+  <div class="timeline-bar">
+    <button class="play-btn" id="play-btn" title="Play/Pause">
+      <svg id="play-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      <svg id="pause-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="display:none">
+        <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+      </svg>
+    </button>
+    <div class="timeline-track">
+      <input type="range" id="hour-slider" min="0" max="168" step="3" value="0">
+      <div class="timeline-ticks" id="timeline-ticks"></div>
+    </div>
+    <div class="hour-display" id="hour-display">
+      <div class="hour-label">Now</div>
+      <div class="hour-date" id="hour-date"></div>
+    </div>
+  </div>
+
+  <!-- Wind speed legend -->
+  <div class="legend" id="wind-legend">
+    <div class="legend-title">Wind (m/s)</div>
+    <div class="legend-bar" id="wind-legend-bar"></div>
+    <div class="legend-labels" id="wind-legend-labels"></div>
+  </div>
+
+  <!-- Swell height legend -->
+  <div class="legend swell-legend" id="swell-legend" style="display:none">
+    <div class="legend-title">Swell (m)</div>
+    <div class="legend-bar" id="swell-legend-bar"></div>
+    <div class="legend-labels" id="swell-legend-labels"></div>
+  </div>
+
+  <!-- Surf rating panel -->
+  <div class="rating-panel" id="rating-panel">
+    <button class="close-btn" id="rating-close">&times;</button>
+    <div class="rating-body"></div>
+  </div>
+
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
