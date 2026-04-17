@@ -63,16 +63,25 @@ class App {
   async _loadLatestRun() {
     setStatus('Finding latest data...');
 
+    const config = window.SURF_CONFIG || {};
+    const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
+    const dataBase = config.DATA_BASE || '';
+
     try {
-      let resp = await fetch(`/api/latest/${this.model}`);
-      if (!resp.ok) resp = await fetch('/api/latest/demo');
+      let resp = await fetch(manifestUrl);
+      if (!resp.ok && !config.MANIFEST_URL) {
+        // Only fall back to demo when on Fly (same-origin manifest).
+        resp = await fetch('/api/latest/demo');
+      }
       if (!resp.ok) {
         setStatus('No data — run: npm run demo');
         return;
       }
 
       const info = await resp.json();
-      this.dataPath = info.path;
+      // Prepend the data base so absolute R2 URLs work the same as relative
+      // /data/ paths under Fly. info.path is e.g. "/data/gfs/20260417_12z".
+      this.dataPath = dataBase ? `${dataBase}${info.path}` : info.path;
 
       if (info.run && info.run !== 'demo') {
         const m = info.run.match(/(\d{4})(\d{2})(\d{2})_(\d{2})z/);

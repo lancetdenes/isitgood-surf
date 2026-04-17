@@ -6,6 +6,9 @@
   <title>Is It Good? — Surf Forecast</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <link rel="stylesheet" href="css/style.css">
+  <!-- Loaded before app.js so SURF_CONFIG is available at startup.
+       Edit js/surf-config.js to point at R2 for Vercel deployment. -->
+  <script src="js/surf-config.js"></script>
 </head>
 <body>
   <!-- Map -->

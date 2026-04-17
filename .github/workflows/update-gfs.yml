@@ -15,6 +15,15 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # Secrets are lifted to job-level env so `if:` conditions below can check
+    # whether they exist (GitHub blocks `secrets.*` references in `if:`).
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
     steps:
       - uses: actions/checkout@v4
 
@@ -52,10 +61,15 @@ jobs:
           tar -czf "/tmp/gfs-${RUN_ID}.tar.gz" -C "data/gfs/${RUN_ID}" .
           ls -lh "/tmp/gfs-${RUN_ID}.tar.gz"
 
+      # ─── Fly.io delivery (skipped once FLY_API_TOKEN is removed) ────────
       - name: Install flyctl
+        if: ${{ env.FLY_API_TOKEN != '' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         uses: superfly/flyctl-actions/setup-flyctl@master
 
       - name: Upload tarball to Fly via SSH stdin
+        if: ${{ env.FLY_API_TOKEN != '' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
@@ -65,6 +79,7 @@ jobs:
             < "/tmp/gfs-${RUN_ID}.tar.gz"
 
       - name: Atomic swap on Fly
+        if: ${{ env.FLY_API_TOKEN != '' }}
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
@@ -72,17 +87,62 @@ jobs:
           flyctl ssh console -a isitgood-surf \
             -C "bash /app/data/scripts/receive-run.sh gfs-${RUN_ID}.tar.gz ${RUN_ID} gfs"
 
-      - name: Verify new run is live
+      - name: Verify Fly is serving new run
+        if: ${{ env.FLY_API_TOKEN != '' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           RUN_ID=${{ steps.run.outputs.run_id }}
           for i in $(seq 1 10); do
             LATEST=$(curl -s https://isitgood-surf.fly.dev/api/latest/gfs | grep -o '"run":"[^"]*"' | cut -d'"' -f4)
-            if [ "$LATEST" = "$RUN_ID" ]; then
-              echo "Live: $LATEST"
-              exit 0
-            fi
-            echo "Waiting for $RUN_ID to go live (currently $LATEST)..."
+            if [ "$LATEST" = "$RUN_ID" ]; then echo "Fly live: $LATEST"; exit 0; fi
+            echo "Waiting for Fly to show $RUN_ID (currently $LATEST)..."
             sleep 3
           done
-          echo "::error::New run did not go live in time"
-          exit 1
+          echo "::warning::Fly did not roll over to $RUN_ID in time"
+
+      # ─── Cloudflare R2 delivery (active once R2_* secrets exist) ────────
+      - name: Upload to Cloudflare R2
+        if: ${{ env.R2_ACCOUNT_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          RUN_ID: ${{ steps.run.outputs.run_id }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # Upload all .bin files for this run. Overwriting is atomic-enough
+          # because the manifest switch below is the client's source of truth.
+          aws s3 cp --recursive --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/octet-stream" \
+            "data/gfs/${RUN_ID}/" "s3://${R2_BUCKET}/data/gfs/${RUN_ID}/"
+
+          # Flip the manifest — clients fetch this on load to discover latest run.
+          # Short cache-max-age so a new run propagates within a minute.
+          echo "{\"model\":\"gfs\",\"run\":\"${RUN_ID}\",\"path\":\"/data/gfs/${RUN_ID}\"}" > /tmp/manifest-gfs.json
+          aws s3 cp --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=60, s-maxage=60" \
+            --content-type "application/json" \
+            /tmp/manifest-gfs.json "s3://${R2_BUCKET}/manifest-gfs.json"
+
+      - name: Prune old runs from R2
+        if: ${{ env.R2_ACCOUNT_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          KEEP_RUN: ${{ steps.run.outputs.run_id }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # List all run directories, keep the current one + the immediate
+          # previous one (for in-flight sessions), delete everything older.
+          aws s3 ls --endpoint-url "$ENDPOINT" "s3://${R2_BUCKET}/data/gfs/" \
+            | awk '{print $2}' | tr -d '/' | sort -r > /tmp/runs.txt
+          tail -n +3 /tmp/runs.txt | while read -r old; do
+            [ -z "$old" ] && continue
+            echo "Deleting old run: $old"
+            aws s3 rm --recursive --endpoint-url "$ENDPOINT" "s3://${R2_BUCKET}/data/gfs/${old}/"
+          done
