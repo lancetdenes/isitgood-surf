@@ -172,43 +172,9 @@ def process_gfs_wave(grib_path, out_path):
     if period is None:
         period = np.zeros_like(height)
 
-    # Downsample 0.16° → 0.5° with land-aware block averaging. Each 3×3 block
-    # averages ONLY its ocean cells (height > 0), preserving coastal amplitudes
-    # while keeping land cells (all-zero blocks) at zero. Pure min-pool would
-    # zero out any block that touches land — understating coastal swell.
-    STRIDE = 3
-    ny_in, nx_in = height.shape
-    ny_out = ny_in // STRIDE
-    nx_out = nx_in // STRIDE
-    ny_crop = ny_out * STRIDE
-    nx_crop = nx_out * STRIDE
-
-    h_blk = height[:ny_crop, :nx_crop].reshape(ny_out, STRIDE, nx_out, STRIDE)
-    d_blk = direction[:ny_crop, :nx_crop].reshape(ny_out, STRIDE, nx_out, STRIDE)
-    p_blk = period[:ny_crop, :nx_crop].reshape(ny_out, STRIDE, nx_out, STRIDE)
-
-    ocean_mask = h_blk > 0
-    ocean_count = ocean_mask.sum(axis=(1, 3))
-    safe_count = np.maximum(ocean_count, 1)
-
-    height = np.where(ocean_count > 0,
-                      (h_blk * ocean_mask).sum(axis=(1, 3)) / safe_count,
-                      0.0).astype(np.float32)
-    period = np.where(ocean_count > 0,
-                      (p_blk * ocean_mask).sum(axis=(1, 3)) / safe_count,
-                      0.0).astype(np.float32)
-
-    # Direction: angular average in sin/cos space over ocean cells only.
-    d_rad = np.deg2rad(d_blk)
-    sin_sum = (np.sin(d_rad) * ocean_mask).sum(axis=(1, 3))
-    cos_sum = (np.cos(d_rad) * ocean_mask).sum(axis=(1, 3))
-    direction = np.where(ocean_count > 0,
-                         (np.rad2deg(np.arctan2(sin_sum, cos_sum)) + 360) % 360,
-                         0.0).astype(np.float32)
-
-    off = STRIDE // 2
-    lats = lats[off:ny_crop:STRIDE]
-    lons = lons[off:nx_crop:STRIDE]
+    # Native 0.25° resolution. No downsampling: coastal accuracy beats file
+    # size now that storage is on R2 (free egress) and the server isn't
+    # memory-bound. Each swell file is ~12 MB, run total ~684 MB.
 
     ny, nx = height.shape
     la1 = float(lats[0])
