@@ -14,6 +14,15 @@ const SCRIPTS_DIR = path.join(DATA_DIR, 'scripts');
 // Enable gzip compression for all responses
 app.use(compression());
 
+// Allow cross-origin reads so the Vercel-hosted frontend can pull grids
+// and the manifest from this Fly backend during the migration window.
+app.use((req, res, next) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
 

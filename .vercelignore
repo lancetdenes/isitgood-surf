@@ -1,0 +1,8 @@
+# Vercel deploys the static frontend only; server + data belong on Fly/R2.
+server.js
+Dockerfile
+fly.toml
+.dockerignore
+data/
+node_modules/
+.github/

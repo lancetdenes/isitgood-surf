@@ -16,3 +16,4 @@ data/uploads/
 # Env / local config
 .env
 .env.local
+.vercel
