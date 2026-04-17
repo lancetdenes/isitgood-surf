@@ -9,6 +9,7 @@ import {
   rateSwell, rateWind, rateOverall, overallRating, subRating,
   ratingBgColor, compassDir, msToMph, mToFt
 } from './ratings.js';
+import { computeForecast } from './forecast.js';
 
 // ── State ──
 
@@ -80,17 +81,17 @@ function _selectClosestHour(targetHour) {
  * Build the full 7-day forecast for a point via the server-side API.
  * One request returns all hours — much faster than loading 57+ grid files.
  */
-export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0) {
+export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0, cachedLoad = null) {
   panelEl.classList.add('open');
   renderLoading(lat, lon);
 
   try {
-    const resp = await fetch(`/api/forecast?lat=${lat}&lon=${lon}&path=${encodeURIComponent(dataPath)}`);
-    if (!resp.ok) throw new Error(`API error: ${resp.status}`);
-    const data = await resp.json();
+    // Client-side forecast computation — reuses the app's grid cache so
+    // clicks are instant when the timeline has already been preloaded.
+    const data = await computeForecast(lat, lon, dataPath, cachedLoad);
 
-    // Use server-detected coast from swell grid if available (more accurate)
-    // Falls back to client-side GeoJSON coastline
+    // Prefer grid-detected coast (sharper at the actual ocean edge);
+    // fall back to GeoJSON coastline when the point is too far inland.
     const effectiveCoast = data.coast || coast;
 
     const hours = data.hours.map(raw => {
@@ -118,7 +119,7 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     _selectClosestHour(currentHour);
     render();
   } catch (e) {
-    console.error('Forecast API error:', e);
+    console.error('Forecast error:', e);
     panelEl.querySelector('.rating-body').innerHTML = `
       <div style="padding:40px 20px;text-align:center;color:#94a3b8;">Error loading forecast</div>
     `;

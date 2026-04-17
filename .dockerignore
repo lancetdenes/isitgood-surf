@@ -1,0 +1,9 @@
+node_modules
+.git
+data/grib
+data/gfs
+data/ecmwf
+data/demo
+.DS_Store
+*.md
+docs/

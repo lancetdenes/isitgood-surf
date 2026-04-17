@@ -245,7 +245,10 @@ class App {
       const coast = findNearestCoast(lat, lng);
       // Start geocode in background (don't block panel opening)
       const geocodePromise = reverseGeocode(lat, lng);
-      await openPanel(lat, lng, coast, this.dataPath, this.runTime, this.hour);
+      // Pass our grid cache loader so the panel's 57-hour forecast reuses
+      // already-downloaded grids instead of re-fetching them.
+      await openPanel(lat, lng, coast, this.dataPath, this.runTime, this.hour,
+                      (url) => this._cachedLoadGrid(url));
       // Update spot name once geocode resolves
       geocodePromise.then(name => { if (name) updatePanelSpotName(name); });
       setStatus('Surf rating ready');

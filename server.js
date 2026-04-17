@@ -381,8 +381,8 @@ function startScheduler() {
   console.log('  [scheduler] Auto-update enabled: GFS every 6h');
 }
 
-app.listen(PORT, () => {
-  console.log(`\n  Is It Good? running at http://localhost:${PORT}\n`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  Is It Good? running at http://0.0.0.0:${PORT}\n`);
 
   // Check for data
   const hasGfs = fs.existsSync(path.join(DATA_DIR, 'gfs')) &&
