@@ -1,11 +1,9 @@
 // surf-config.js — Data-source config loaded before app.js.
 //
-// TRANSITIONAL: frontend is on Vercel, data still served from Fly until R2
-// is set up. Once R2 is live, swap both values to the R2 custom domain:
-//   DATA_BASE:    "https://data.isitgood.surf"
-//   MANIFEST_URL: "https://data.isitgood.surf/manifest-gfs.json"
-// and then `fly scale count 0 -a isitgood-surf` to shut Fly off.
+// Serving grids from Cloudflare R2 via the bucket's public r2.dev URL.
+// Move to a custom domain (e.g. https://data.isitgood.surf) later by
+// connecting the bucket to the zone in the Cloudflare R2 dashboard.
 window.SURF_CONFIG = {
-  DATA_BASE: "https://isitgood-surf.fly.dev",
-  MANIFEST_URL: "https://isitgood-surf.fly.dev/api/latest/gfs",
+  DATA_BASE: "https://pub-97a48e761d40405a9d6d905bb62e3452.r2.dev",
+  MANIFEST_URL: "https://pub-97a48e761d40405a9d6d905bb62e3452.r2.dev/manifest-gfs.json",
 };
