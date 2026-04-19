@@ -13,7 +13,7 @@
     "update:gfs": "bash data/scripts/update.sh gfs",
     "update:ecmwf": "bash data/scripts/update.sh ecmwf",
     "build:coast-points": "node data/scripts/build-coast-points.js",
-    "test:build": "node --test data/scripts/test/"
+    "test:build": "node --test 'data/scripts/test/*.test.js'"
   },
   "dependencies": {
     "compression": "^1.8.1",
