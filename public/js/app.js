@@ -231,6 +231,7 @@ class App {
     this.hour = hour;
     this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
+    onHourChanged();
   }
 
   /** Like setHour but returns a promise that resolves when grids are loaded */
@@ -238,6 +239,7 @@ class App {
     this.hour = hour;
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
+    onHourChanged();
   }
 
   async _onMapClick(e) {
