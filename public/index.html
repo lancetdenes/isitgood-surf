@@ -39,7 +39,7 @@
 
       <div class="divider"></div>
 
-      <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where it's pumping</button>
+      <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where its pumping</button>
     </div>
 
     <div class="hint" id="hint">Click coast for surf rating</div>
@@ -89,13 +89,17 @@
   <!-- Where it's pumping panel -->
   <div id="pumping-panel" class="pumping-panel" aria-hidden="true">
     <div class="pumping-header">
-      <h2 class="pumping-title">where it's pumping</h2>
+      <h2 class="pumping-title">where its pumping</h2>
       <button class="pumping-close" id="pumping-close" aria-label="Close">&times;</button>
     </div>
     <div class="pumping-tabs" role="tablist">
       <button class="pumping-tab active" data-mode="now">right now</button>
       <button class="pumping-tab" data-mode="week">score this week</button>
       <button class="pumping-tab" data-mode="next">score next week</button>
+    </div>
+    <div class="pumping-source-tabs" role="tablist">
+      <button class="pumping-source-tab active" data-source="known">known</button>
+      <button class="pumping-source-tab" data-source="mysto">mysto</button>
     </div>
     <div class="pumping-status" id="pumping-status">Loading...</div>
     <div class="pumping-list" id="pumping-list"></div>
