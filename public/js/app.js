@@ -17,6 +17,7 @@ import { loadGrid } from './grid.js';
 import { initUI, updateLegendVisibility, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
+import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
 
 class App {
   constructor() {
@@ -50,6 +51,7 @@ class App {
 
       initUI(this);
       initPanel();
+      initPumping(this);
 
       // Load coastline data in background
       loadCoastline().catch(e => console.warn('Coastline load failed:', e));

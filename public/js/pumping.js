@@ -158,3 +158,48 @@ export function initPumping(app) {
     t.addEventListener('click', () => setMode(t.dataset.mode));
   });
 }
+
+let _currentMode = 'now';
+
+export function openPumpingPanel() {
+  const panel = document.getElementById('pumping-panel');
+  const backdrop = document.getElementById('pumping-backdrop');
+  if (!panel) return;
+  panel.classList.add('visible');
+  backdrop.classList.add('visible');
+  panel.setAttribute('aria-hidden', 'false');
+  renderCurrentMode();
+}
+
+export function closePumpingPanel() {
+  const panel = document.getElementById('pumping-panel');
+  const backdrop = document.getElementById('pumping-backdrop');
+  if (!panel) return;
+  panel.classList.remove('visible');
+  backdrop.classList.remove('visible');
+  panel.setAttribute('aria-hidden', 'true');
+}
+
+function setMode(mode) {
+  _currentMode = mode;
+  document.querySelectorAll('.pumping-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  renderCurrentMode();
+}
+
+async function renderCurrentMode() {
+  const status = document.getElementById('pumping-status');
+  const list = document.getElementById('pumping-list');
+  if (!status || !list) return;
+  status.textContent = `mode: ${_currentMode} (renderer pending)`;
+}
+
+let _rerankTimer = null;
+export function onHourChanged() {
+  if (_currentMode !== 'now') return;
+  const panel = document.getElementById('pumping-panel');
+  if (!panel?.classList.contains('visible')) return;
+  clearTimeout(_rerankTimer);
+  _rerankTimer = setTimeout(renderCurrentMode, 150);
+}
