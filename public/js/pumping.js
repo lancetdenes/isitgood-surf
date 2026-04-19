@@ -302,9 +302,10 @@ async function renderCurrentMode() {
       status.textContent = `Top ${ranked.length} — right now`;
       list.innerHTML = ranked.map((e, i) => rowHtml(e, i + 1)).join('');
       wireRowClicks(list);
-    } else {
-      // Week / next-week rendered in Task 20+
-      status.textContent = `(${_currentMode} mode — loading in Task 20)`;
+    } else if (_currentMode === 'week') {
+      await renderPeakMode('week', spots);
+    } else if (_currentMode === 'next') {
+      await renderPeakMode('next', spots);
     }
   } catch (err) {
     console.error('pumping render error', err);
@@ -312,6 +313,106 @@ async function renderCurrentMode() {
     document.getElementById('pumping-retry')?.addEventListener('click', renderCurrentMode);
     list.innerHTML = '';
   }
+}
+
+function hourRangeFor(mode) {
+  if (mode === 'week') return Array.from({ length: 57 }, (_, i) => i * 3);
+  if (mode === 'next') {
+    const arr = [];
+    for (let h = 174; h <= 336; h += 6) arr.push(h);
+    return arr;
+  }
+  return [];
+}
+
+function cacheKey(mode) {
+  const model = _appRef?.model || 'gfs';
+  const run = _appRef?.runTime?.toISOString() || 'unknown';
+  return `${model}|${run}|${mode}`;
+}
+
+async function resolveGfsPath() {
+  if (_gfsPathPromise) return _gfsPathPromise;
+  _gfsPathPromise = (async () => {
+    if (_appRef?.model === 'gfs') return _appRef.dataPath;
+    const cfg = window.SURF_CONFIG || {};
+    const manifestUrl = cfg.MANIFEST_URL?.replace('manifest-ecmwf.json', 'manifest-gfs.json')
+      || '/api/latest/gfs';
+    const resp = await fetch(manifestUrl);
+    if (!resp.ok) return null;
+    const info = await resp.json();
+    return (cfg.DATA_BASE || '') + info.path;
+  })();
+  return _gfsPathPromise;
+}
+
+async function rankPeakProgress(spots, loadHour, hours, onProgress) {
+  const peaks = new Map();
+  for (let i = 0; i < hours.length; i++) {
+    const { wind, swell } = await loadHour(hours[i]);
+    if (wind && swell) {
+      for (const spot of spots) {
+        const m = scoreSpot(spot, wind, swell);
+        if (!m) continue;
+        const prev = peaks.get(spot);
+        if (!prev || m.overall > prev.score) {
+          peaks.set(spot, { spot, score: m.overall, peakHour: hours[i], metrics: m });
+        }
+      }
+    }
+    onProgress(i + 1);
+  }
+  return Array.from(peaks.values()).sort((a, b) => b.score - a.score).slice(0, 100);
+}
+
+async function renderPeakMode(mode, spots) {
+  const status = document.getElementById('pumping-status');
+  const list = document.getElementById('pumping-list');
+  const key = cacheKey(mode);
+
+  if (_peakCache.has(key)) {
+    const cached = _peakCache.get(key);
+    list.innerHTML = cached.map((e, i) => rowHtml(e, i + 1)).join('');
+    status.textContent = `Top ${cached.length} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
+    wireRowClicks(list);
+    return;
+  }
+
+  const dataBase = mode === 'next' ? await resolveGfsPath() : _appRef.dataPath;
+  if (!dataBase) {
+    status.textContent = 'Extended forecast not available — GFS manifest not reachable.';
+    list.innerHTML = '';
+    return;
+  }
+
+  const hours = hourRangeFor(mode);
+  const loader = _appRef._cachedLoadGrid.bind(_appRef);
+  const loadHour = async (h) => {
+    const fhr = String(h).padStart(3, '0');
+    const [wind, swell] = await Promise.all([
+      loader(`${dataBase}/wind_f${fhr}.bin`),
+      loader(`${dataBase}/swell_f${fhr}.bin`),
+    ]);
+    return { wind, swell };
+  };
+
+  status.innerHTML = spinnerHtml(`Computing peak (${mode === 'week' ? '7-day' : '7-14 day'})… 0/${hours.length}`);
+  const results = await rankPeakProgress(spots, loadHour, hours, (n) => {
+    status.innerHTML = spinnerHtml(`Computing peak… ${n}/${hours.length}`);
+  });
+
+  if (results.length === 0) {
+    status.textContent = mode === 'next'
+      ? 'Extended forecast not available for this run. Refreshed daily.'
+      : 'No data available for this range.';
+    list.innerHTML = '';
+    return;
+  }
+
+  _peakCache.set(key, results);
+  list.innerHTML = results.map((e, i) => rowHtml(e, i + 1)).join('');
+  status.textContent = `Top ${results.length} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
+  wireRowClicks(list);
 }
 
 let _rerankTimer = null;
