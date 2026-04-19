@@ -118,3 +118,43 @@ export async function rankPeak(spots, loadHour, hoursRange) {
     .sort((a, b) => b.score - a.score)
     .slice(0, 100);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Runtime: loader + cache + app wiring
+// ─────────────────────────────────────────────────────────────────────────
+
+let _spotsPromise = null;
+let _appRef = null;
+const _peakCache = new Map(); // key: `${model}|${run}|${mode}` → top-100 results
+
+function loadSpotsOnce() {
+  if (_spotsPromise) return _spotsPromise;
+  _spotsPromise = Promise.all([
+    fetch('data/named-spots.json').then(r => { if (!r.ok) throw new Error('named-spots ' + r.status); return r.json(); }),
+    fetch('data/coast-points.json').then(r => { if (!r.ok) throw new Error('coast-points ' + r.status); return r.json(); }),
+  ]).then(([named, coast]) => {
+    const normalizedCoast = coast.map(c => ({ n: c.n, r: c.c, la: c.la, ln: c.ln, o: c.o }));
+    return [...named, ...normalizedCoast];
+  }).catch(err => {
+    _spotsPromise = null;
+    throw err;
+  });
+  return _spotsPromise;
+}
+
+let _gfsPathPromise = null;
+
+export function invalidatePumpingCache() {
+  _peakCache.clear();
+  _gfsPathPromise = null;
+}
+
+export function initPumping(app) {
+  _appRef = app;
+  document.getElementById('pumping-btn')?.addEventListener('click', openPumpingPanel);
+  document.getElementById('pumping-close')?.addEventListener('click', closePumpingPanel);
+  document.getElementById('pumping-backdrop')?.addEventListener('click', closePumpingPanel);
+  document.querySelectorAll('.pumping-tab').forEach(t => {
+    t.addEventListener('click', () => setMode(t.dataset.mode));
+  });
+}
