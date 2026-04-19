@@ -188,11 +188,114 @@ function setMode(mode) {
   renderCurrentMode();
 }
 
+const RATING_COLORS = {
+  flat:     '#64748b',
+  poor:     '#f59e0b',
+  marginal: '#eab308',
+  fair:     '#14b8a6',
+  good:     '#38bdf8',
+  epic:     '#a855f7',
+};
+
+function ratingColor(score) {
+  if (score >= 8) return RATING_COLORS.epic;
+  if (score >= 6.5) return RATING_COLORS.good;
+  if (score >= 4.5) return RATING_COLORS.fair;
+  if (score >= 2.5) return RATING_COLORS.marginal;
+  if (score >= 1) return RATING_COLORS.poor;
+  return RATING_COLORS.flat;
+}
+
+function compassLabel(deg) {
+  const labels = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return labels[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+}
+
+function escapeHtml(s) {
+  return (s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+
+function formatHourLabel(fhr) {
+  if (!_appRef?.runTime) return `+${fhr}h`;
+  const d = new Date(_appRef.runTime.getTime() + fhr * 3600 * 1000);
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const hr = d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }).replace(' ', '').toLowerCase();
+  return `${day} ${hr}`;
+}
+
+function rowHtml(entry, rank) {
+  const { spot, score, metrics, peakHour } = entry;
+  const goldClass = rank <= 3 ? 'gold' : '';
+  const color = ratingColor(score);
+  const whenHtml = peakHour != null ? `<div class="pumping-when">${formatHourLabel(peakHour)}</div>` : '';
+  const region = spot.r ? spot.r : '';
+  return `
+    <div class="pumping-row" data-la="${spot.la}" data-ln="${spot.ln}" data-peak="${peakHour ?? ''}">
+      <div class="pumping-rank ${goldClass}">#${rank}</div>
+      <div class="pumping-dot" style="background:${color}"></div>
+      <div>
+        <div class="pumping-spot">${escapeHtml(spot.n)}</div>
+        <div class="pumping-region">${escapeHtml(region)}</div>
+      </div>
+      <div class="pumping-swell">↑ ${metrics.swHeightFt.toFixed(1)}ft @ ${metrics.swPeriod.toFixed(0)}s</div>
+      <div class="pumping-wind">← ${metrics.windMph.toFixed(0)}mph ${compassLabel(metrics.windDir)}</div>
+      ${whenHtml}
+    </div>`;
+}
+
+function wireRowClicks(list) {
+  list.querySelectorAll('.pumping-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const la = parseFloat(row.dataset.la);
+      const ln = parseFloat(row.dataset.ln);
+      const peak = row.dataset.peak ? parseInt(row.dataset.peak, 10) : null;
+      onRowClick(la, ln, peak);
+    });
+  });
+}
+
+async function onRowClick(la, ln, peakHour) {
+  // Full integration wired in Task 19. For now: close panel and fly the map.
+  closePumpingPanel();
+  if (_appRef?.map) _appRef.map.flyTo({ center: [ln, la], zoom: 10, speed: 1.5 });
+  if (peakHour != null && _appRef?.setHour) _appRef.setHour(peakHour);
+}
+
+function spinnerHtml(text) {
+  return `<span class="pumping-spinner"></span>${text}`;
+}
+
 async function renderCurrentMode() {
   const status = document.getElementById('pumping-status');
   const list = document.getElementById('pumping-list');
   if (!status || !list) return;
-  status.textContent = `mode: ${_currentMode} (renderer pending)`;
+
+  try {
+    status.innerHTML = spinnerHtml('Loading spots...');
+    list.innerHTML = '';
+
+    const spots = await loadSpotsOnce();
+
+    if (_currentMode === 'now') {
+      const { windGrid, swellGrid } = _appRef;
+      if (!windGrid || !swellGrid) {
+        status.textContent = 'Forecast data not yet loaded';
+        return;
+      }
+      const ranked = rankNow(spots, windGrid, swellGrid);
+      status.textContent = `Top ${ranked.length} — right now`;
+      list.innerHTML = ranked.map((e, i) => rowHtml(e, i + 1)).join('');
+      wireRowClicks(list);
+    } else {
+      // Week / next-week rendered in Task 20+
+      status.textContent = `(${_currentMode} mode — loading in Task 20)`;
+    }
+  } catch (err) {
+    console.error('pumping render error', err);
+    status.innerHTML = `Unable to load spot list. <button id="pumping-retry" style="background:none;border:1px solid var(--border);color:var(--accent);padding:4px 10px;border-radius:4px;cursor:pointer;margin-left:8px;">Retry</button>`;
+    document.getElementById('pumping-retry')?.addEventListener('click', renderCurrentMode);
+    list.innerHTML = '';
+  }
 }
 
 let _rerankTimer = null;
