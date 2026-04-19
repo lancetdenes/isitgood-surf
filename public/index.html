@@ -36,6 +36,10 @@
         <button class="ctrl-btn active" data-layer="wind">Wind</button>
         <button class="ctrl-btn" data-layer="swell">Swell</button>
       </div>
+
+      <div class="divider"></div>
+
+      <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where it's pumping</button>
     </div>
 
     <div class="hint" id="hint">Click coast for surf rating</div>
@@ -81,6 +85,22 @@
     <button class="close-btn" id="rating-close">&times;</button>
     <div class="rating-body"></div>
   </div>
+
+  <!-- Where it's pumping panel -->
+  <div id="pumping-panel" class="pumping-panel" aria-hidden="true">
+    <div class="pumping-header">
+      <h2 class="pumping-title">where it's pumping</h2>
+      <button class="pumping-close" id="pumping-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="pumping-tabs" role="tablist">
+      <button class="pumping-tab active" data-mode="now">right now</button>
+      <button class="pumping-tab" data-mode="week">score this week</button>
+      <button class="pumping-tab" data-mode="next">score next week</button>
+    </div>
+    <div class="pumping-status" id="pumping-status">Loading...</div>
+    <div class="pumping-list" id="pumping-list"></div>
+  </div>
+  <div id="pumping-backdrop" class="pumping-backdrop" aria-hidden="true"></div>
 
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
