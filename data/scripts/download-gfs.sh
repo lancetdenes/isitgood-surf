@@ -83,6 +83,35 @@ for FHR in $HOURS; do
   fi
 done
 
+# ── Extended-range forecast: f174-f336 at 6-hourly steps (days 7-14) ──
+EXT_HOURS=$(seq 174 6 336)
+EXT_TOTAL=$(echo "$EXT_HOURS" | wc -w | tr -d ' ')
+EXT_COUNT=0
+
+echo ""
+echo "━━━ Extended range (days 7-14, 6-hourly) ━━━"
+for FHR in $EXT_HOURS; do
+  FHRP=$(printf "%03d" "$FHR")
+  EXT_COUNT=$((EXT_COUNT + 1))
+  echo -n "  [${EXT_COUNT}/${EXT_TOTAL}] f${FHRP}: "
+
+  WIND_FILE="${GRIB_DIR}/gfs_wind_f${FHRP}.grib2"
+  if [ ! -f "$WIND_FILE" ]; then
+    WIND_URL="${NOMADS_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fatmos&file=gfs.t${CYCLE}z.pgrb2.0p25.f${FHRP}&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on"
+    curl -sf -o "$WIND_FILE" "$WIND_URL" && echo -n "wind ✓  " || echo -n "wind ✗  "
+  else
+    echo -n "wind (cached)  "
+  fi
+
+  WAVE_FILE="${GRIB_DIR}/gfs_wave_f${FHRP}.grib2"
+  if [ ! -f "$WAVE_FILE" ]; then
+    WAVE_URL="${WAVE_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fwave%2Fgridded&file=gfswave.t${CYCLE}z.global.0p25.f${FHRP}.grib2&var_HTSGW=on&var_DIRPW=on&var_PERPW=on"
+    curl -sf -o "$WAVE_FILE" "$WAVE_URL" && echo "wave ✓" || echo "wave ✗"
+  else
+    echo "wave (cached)"
+  fi
+done
+
 echo ""
 echo "━━━ Download complete ━━━"
 echo "GRIB files: ${GRIB_DIR}"
