@@ -5,7 +5,10 @@ node_modules/
 data/gfs/
 data/ecmwf/
 data/grib/
+data/demo/
 data/uploads/
+data/reference/*
+!data/reference/.gitkeep
 *.bin
 *.grib2
 *.idx

@@ -17,6 +17,7 @@ import { loadGrid } from './grid.js';
 import { initUI, updateLegendVisibility, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
+import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
 
 class App {
   constructor() {
@@ -50,6 +51,7 @@ class App {
 
       initUI(this);
       initPanel();
+      initPumping(this);
 
       // Load coastline data in background
       loadCoastline().catch(e => console.warn('Coastline load failed:', e));
@@ -62,6 +64,7 @@ class App {
 
   async _loadLatestRun() {
     setStatus('Finding latest data...');
+    invalidatePumpingCache();
 
     const config = window.SURF_CONFIG || {};
     const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
@@ -217,6 +220,7 @@ class App {
   setModel(model) {
     if (model === this.model) return;
     this.model = model;
+    invalidatePumpingCache();
     this._loadLatestRun();
   }
 
@@ -229,6 +233,7 @@ class App {
     this.hour = hour;
     this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
+    onHourChanged();
   }
 
   /** Like setHour but returns a promise that resolves when grids are loaded */
@@ -236,6 +241,7 @@ class App {
     this.hour = hour;
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
+    onHourChanged();
   }
 
   async _onMapClick(e) {

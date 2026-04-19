@@ -11,10 +11,18 @@
     "process": "python3 data/scripts/process-grib.py",
     "update": "bash data/scripts/update.sh",
     "update:gfs": "bash data/scripts/update.sh gfs",
-    "update:ecmwf": "bash data/scripts/update.sh ecmwf"
+    "update:ecmwf": "bash data/scripts/update.sh ecmwf",
+    "build:coast-points": "node data/scripts/build-coast-points.js",
+    "fill:named-offshore": "node data/scripts/fill-named-offshore.js",
+    "test:build": "node --test 'data/scripts/test/*.test.js'"
   },
   "dependencies": {
     "compression": "^1.8.1",
     "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@turf/boolean-point-in-polygon": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
+    "kdbush": "^4.0.2"
   }
 }
