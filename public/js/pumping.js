@@ -1,0 +1,120 @@
+/**
+ * pumping.js — "Where it's pumping" top-100 ranking + panel.
+ *
+ * Core pure functions (tested):
+ *   rankNow(spots, windGrid, swellGrid) → top-100 entries for current hour
+ *   rankPeak(spots, loadHour, hours)    → top-100 entries by peak score over hour range
+ *
+ * UI entry points (called from app.js):
+ *   initPumping(app), openPumpingPanel, closePumpingPanel, onHourChanged,
+ *   invalidatePumpingCache
+ */
+
+const TO_RAD = Math.PI / 180;
+const TO_DEG = 180 / Math.PI;
+
+/** Angular bilinear interpolation of a direction field (sin/cos weighted sums). */
+function interpolateSwellDir(grid, lon, lat) {
+  let fi = (lon - grid.lo1) / grid.dx;
+  const fj = (grid.la1 - lat) / grid.dy;
+  while (fi < 0) fi += grid.nx;
+  while (fi >= grid.nx) fi -= grid.nx;
+  if (fj < 0 || fj >= grid.ny - 1) return 0;
+  const i0 = Math.floor(fi), j0 = Math.floor(fj);
+  const fx = fi - i0, fy = fj - j0;
+  const i1 = (i0 + 1) % grid.nx;
+  const j1 = Math.min(j0 + 1, grid.ny - 1);
+  const a = grid.arrays[1];
+  const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
+  const w01 = (1 - fx) * fy, w11 = fx * fy;
+  const i00 = j0 * grid.nx + i0, i10 = j0 * grid.nx + i1;
+  const i01 = j1 * grid.nx + i0, i11 = j1 * grid.nx + i1;
+  const sinSum = w00 * Math.sin(a[i00] * TO_RAD) + w10 * Math.sin(a[i10] * TO_RAD)
+               + w01 * Math.sin(a[i01] * TO_RAD) + w11 * Math.sin(a[i11] * TO_RAD);
+  const cosSum = w00 * Math.cos(a[i00] * TO_RAD) + w10 * Math.cos(a[i10] * TO_RAD)
+               + w01 * Math.cos(a[i01] * TO_RAD) + w11 * Math.cos(a[i11] * TO_RAD);
+  return (Math.atan2(sinSum, cosSum) * TO_DEG + 360) % 360;
+}
+
+// Mirrors ratings.js sD/wD/oD. Kept inline so this ESM module has no dependency
+// on the global-scoped ratings.js functions.
+function scoreSwell(h_ft, p, swDir, optimalDir) {
+  let s = 0;
+  if (h_ft >= 8) s += 4; else if (h_ft >= 5) s += 3; else if (h_ft >= 3) s += 2.2;
+  else if (h_ft >= 2) s += 1.5; else if (h_ft >= 1) s += 0.7;
+  if (p >= 14) s += 3; else if (p >= 11) s += 2.2; else if (p >= 9) s += 1.5;
+  else if (p >= 7) s += 0.8; else s += 0.3;
+  const diff = Math.abs(((swDir - optimalDir + 540) % 360) - 180);
+  if (diff <= 20) s += 3; else if (diff <= 40) s += 2.2; else if (diff <= 60) s += 1.5;
+  else if (diff <= 90) s += 0.8; else s += 0.2;
+  return s;
+}
+
+function scoreWind(mph, windDir, offshoreDir) {
+  const d = Math.abs(((windDir - offshoreDir + 540) % 360) - 180);
+  const off = d <= 45, side = d > 45 && d < 135;
+  if (mph < 3) return 10;
+  if (off) return mph <= 10 ? 9 : mph <= 15 ? 7 : 5;
+  if (side) return mph <= 6 ? 7 : mph <= 12 ? 4.5 : 3;
+  return mph <= 5 ? 4 : mph <= 10 ? 2.5 : mph <= 18 ? 1.5 : 0.5;
+}
+
+function scoreSpot(spot, windGrid, swellGrid) {
+  if (spot.o == null) return null;
+  const w = windGrid?.interpolate?.(spot.ln, spot.la);
+  const s = swellGrid?.interpolate?.(spot.ln, spot.la);
+  if (!w || !s) return null;
+
+  const u = w[0], v = w[1];
+  const windMs = Math.sqrt(u * u + v * v);
+  const windMph = windMs * 2.23694;
+  const windDir = (Math.atan2(-u, -v) * TO_DEG + 360) % 360;
+
+  const swHeightM = s[0];
+  const swHeightFt = swHeightM * 3.28084;
+  const swPeriod = s[2];
+  const swDir = swellGrid.arrays ? interpolateSwellDir(swellGrid, spot.ln, spot.la) : s[1];
+
+  // Optimal swell approaches from opposite of offshore (waves from sea).
+  const optimalSwell = (spot.o + 180) % 360;
+  const sw = scoreSwell(swHeightFt, swPeriod, swDir, optimalSwell);
+  const wi = scoreWind(windMph, windDir, spot.o);
+  const overall = sw * 0.6 + wi * 0.4;
+  return { overall, swHeightFt, swPeriod, swDir, windMph, windDir };
+}
+
+export function rankNow(spots, windGrid, swellGrid) {
+  const scored = [];
+  for (const spot of spots) {
+    const m = scoreSpot(spot, windGrid, swellGrid);
+    if (m) scored.push({ spot, score: m.overall, metrics: m });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, 100);
+}
+
+/**
+ * Rank by peak score over a forecast-hour range.
+ * @param {Array} spots
+ * @param {(h:number)=>Promise<{wind, swell}>} loadHour
+ * @param {number[]} hoursRange
+ * @returns {Promise<Array<{spot, score, peakHour, metrics}>>} top 100
+ */
+export async function rankPeak(spots, loadHour, hoursRange) {
+  const peaks = new Map();
+  for (const h of hoursRange) {
+    const { wind, swell } = await loadHour(h);
+    if (!wind || !swell) continue;
+    for (const spot of spots) {
+      const m = scoreSpot(spot, wind, swell);
+      if (!m) continue;
+      const prev = peaks.get(spot);
+      if (!prev || m.overall > prev.score) {
+        peaks.set(spot, { spot, score: m.overall, peakHour: h, metrics: m });
+      }
+    }
+  }
+  return Array.from(peaks.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 100);
+}
