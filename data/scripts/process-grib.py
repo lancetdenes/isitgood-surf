@@ -256,8 +256,10 @@ def main():
     print(f"  Output: {out_dir}")
     print()
 
-    # Process all forecast hours
-    for fhr in range(0, 169, 3):
+    # Process all forecast hours: 0-168 at 3-hourly, then 174-336 at 6-hourly
+    # (6-hourly extended range covers days 7-14 for the "score next week" tab).
+    hours = list(range(0, 169, 3)) + list(range(174, 337, 6))
+    for fhr in hours:
         fhrp = f"{fhr:03d}"
         print(f"  f{fhrp}:")
 
