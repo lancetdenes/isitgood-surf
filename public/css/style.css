@@ -466,7 +466,7 @@ body {
   }
 }
 
-/* ── Where it's pumping ── */
+/* ── Where its pumping ── */
 .pumping-backdrop {
   position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35);
   opacity: 0; pointer-events: none; transition: opacity 180ms ease;
@@ -506,6 +506,23 @@ body {
 }
 .pumping-tab:hover { color: var(--text); }
 .pumping-tab.active {
+  background: var(--accent-dim); color: var(--accent);
+  border-color: var(--accent);
+}
+
+.pumping-source-tabs {
+  display: flex; padding: 0 8px 8px; gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.pumping-source-tab {
+  flex: 1; padding: 4px 8px; font-size: 10px; font-weight: 500;
+  background: transparent; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: all 120ms ease; text-transform: lowercase;
+  letter-spacing: 0.3px;
+}
+.pumping-source-tab:hover { color: var(--text); }
+.pumping-source-tab.active {
   background: var(--accent-dim); color: var(--accent);
   border-color: var(--accent);
 }

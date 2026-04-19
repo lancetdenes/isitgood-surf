@@ -29,11 +29,28 @@ test('rankNow skips spots where grids return null', () => {
 });
 
 test('rankNow returns at most 100 entries', () => {
-  const many = Array.from({ length: 500 }, (_, i) => ({ n: `s${i}`, la: 0, ln: 0, o: 180 }));
+  // Spread spots far apart so the 25km dedupe doesn't collapse them.
+  const many = Array.from({ length: 500 }, (_, i) => {
+    const lat = -80 + (i % 30) * 5;
+    const lon = -180 + Math.floor(i / 30) * 12;
+    return { n: `s${i}`, la: lat, ln: lon, o: 180 };
+  });
   const wind = { interpolate: () => [Math.random(), Math.random()] };
   const swell = { interpolate: () => [Math.random() * 3, 180, 10] };
   const result = rankNow(many, wind, swell);
   assert.equal(result.length, 100);
+});
+
+test('rankNow dedupes spots closer than 25km', () => {
+  // Two clusters: 5 spots within 10km of (0,0) and 5 spots within 10km of (20,20).
+  const spots = [];
+  for (let i = 0; i < 5; i++) spots.push({ n: `a${i}`, la: 0 + i * 0.05, ln: 0, o: 180 });
+  for (let i = 0; i < 5; i++) spots.push({ n: `b${i}`, la: 20 + i * 0.05, ln: 20, o: 180 });
+  const wind = { interpolate: () => [0, 0] };
+  const swell = { interpolate: () => [3, 180, 14] };
+  const result = rankNow(spots, wind, swell);
+  // Only one from each cluster survives dedupe = 2 total.
+  assert.equal(result.length, 2);
 });
 
 test('rankNow skips spots with null offshoreDeg (o)', () => {

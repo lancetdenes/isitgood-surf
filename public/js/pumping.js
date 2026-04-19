@@ -1,5 +1,5 @@
 /**
- * pumping.js — "Where it's pumping" top-100 ranking + panel.
+ * pumping.js — "Where its pumping" top-100 ranking + panel.
  *
  * Core pure functions (tested):
  *   rankNow(spots, windGrid, swellGrid) → top-100 entries for current hour
@@ -83,6 +83,35 @@ function scoreSpot(spot, windGrid, swellGrid) {
   return { overall, swHeightFt, swPeriod, swDir, windMph, windDir };
 }
 
+/** Haversine km between two lat/lon pairs. */
+function kmBetween(aLa, aLn, bLa, bLn) {
+  const R = 6371.0088, TR = Math.PI / 180;
+  const dLat = (bLa - aLa) * TR, dLon = (bLn - aLn) * TR;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(aLa * TR) * Math.cos(bLa * TR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/** Walk sorted entries (highest-scoring first), keep only those farther than
+ *  minKm from every previously-kept spot. Returns first 100 kept. */
+function dedupeByDistance(sorted, minKm) {
+  const kept = [];
+  for (const entry of sorted) {
+    let tooClose = false;
+    for (const k of kept) {
+      if (kmBetween(k.spot.la, k.spot.ln, entry.spot.la, entry.spot.ln) < minKm) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (!tooClose) kept.push(entry);
+    if (kept.length >= 100) break;
+  }
+  return kept;
+}
+
+const DEDUPE_KM = 25;
+
 export function rankNow(spots, windGrid, swellGrid) {
   const scored = [];
   for (const spot of spots) {
@@ -90,7 +119,7 @@ export function rankNow(spots, windGrid, swellGrid) {
     if (m) scored.push({ spot, score: m.overall, metrics: m });
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, 100);
+  return dedupeByDistance(scored, DEDUPE_KM);
 }
 
 /**
@@ -114,9 +143,10 @@ export async function rankPeak(spots, loadHour, hoursRange) {
       }
     }
   }
-  return Array.from(peaks.values())
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 100);
+  return dedupeByDistance(
+    Array.from(peaks.values()).sort((a, b) => b.score - a.score),
+    DEDUPE_KM
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -133,8 +163,11 @@ function loadSpotsOnce() {
     fetch('data/named-spots.json').then(r => { if (!r.ok) throw new Error('named-spots ' + r.status); return r.json(); }),
     fetch('data/coast-points.json').then(r => { if (!r.ok) throw new Error('coast-points ' + r.status); return r.json(); }),
   ]).then(([named, coast]) => {
-    const normalizedCoast = coast.map(c => ({ n: c.n, r: c.c, la: c.la, ln: c.ln, o: c.o }));
-    return [...named, ...normalizedCoast];
+    const tagged = [
+      ...named.map(s => ({ ...s, _src: 'known' })),
+      ...coast.map(c => ({ n: c.n, r: c.c, la: c.la, ln: c.ln, o: c.o, _src: 'mysto' })),
+    ];
+    return tagged;
   }).catch(err => {
     _spotsPromise = null;
     throw err;
@@ -157,9 +190,13 @@ export function initPumping(app) {
   document.querySelectorAll('.pumping-tab').forEach(t => {
     t.addEventListener('click', () => setMode(t.dataset.mode));
   });
+  document.querySelectorAll('.pumping-source-tab').forEach(t => {
+    t.addEventListener('click', () => setSource(t.dataset.source));
+  });
 }
 
 let _currentMode = 'now';
+let _currentSource = 'known';
 
 export function openPumpingPanel() {
   const panel = document.getElementById('pumping-panel');
@@ -184,6 +221,14 @@ function setMode(mode) {
   _currentMode = mode;
   document.querySelectorAll('.pumping-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.mode === mode);
+  });
+  renderCurrentMode();
+}
+
+function setSource(source) {
+  _currentSource = source;
+  document.querySelectorAll('.pumping-source-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.source === source);
   });
   renderCurrentMode();
 }
@@ -290,7 +335,8 @@ async function renderCurrentMode() {
     status.innerHTML = spinnerHtml('Loading spots...');
     list.innerHTML = '';
 
-    const spots = await loadSpotsOnce();
+    const allSpots = await loadSpotsOnce();
+    const spots = allSpots.filter(s => s._src === _currentSource);
 
     if (_currentMode === 'now') {
       const { windGrid, swellGrid } = _appRef;
@@ -299,7 +345,7 @@ async function renderCurrentMode() {
         return;
       }
       const ranked = rankNow(spots, windGrid, swellGrid);
-      status.textContent = `Top ${ranked.length} — right now`;
+      status.textContent = `Top ${ranked.length} ${_currentSource} — right now`;
       list.innerHTML = ranked.map((e, i) => rowHtml(e, i + 1)).join('');
       wireRowClicks(list);
     } else if (_currentMode === 'week') {
@@ -328,7 +374,7 @@ function hourRangeFor(mode) {
 function cacheKey(mode) {
   const model = _appRef?.model || 'gfs';
   const run = _appRef?.runTime?.toISOString() || 'unknown';
-  return `${model}|${run}|${mode}`;
+  return `${model}|${run}|${mode}|${_currentSource}`;
 }
 
 async function resolveGfsPath() {
@@ -362,7 +408,10 @@ async function rankPeakProgress(spots, loadHour, hours, onProgress) {
     }
     onProgress(i + 1);
   }
-  return Array.from(peaks.values()).sort((a, b) => b.score - a.score).slice(0, 100);
+  return dedupeByDistance(
+    Array.from(peaks.values()).sort((a, b) => b.score - a.score),
+    DEDUPE_KM
+  );
 }
 
 async function renderPeakMode(mode, spots) {
@@ -373,7 +422,7 @@ async function renderPeakMode(mode, spots) {
   if (_peakCache.has(key)) {
     const cached = _peakCache.get(key);
     list.innerHTML = cached.map((e, i) => rowHtml(e, i + 1)).join('');
-    status.textContent = `Top ${cached.length} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
+    status.textContent = `Top ${cached.length} ${_currentSource} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
     wireRowClicks(list);
     return;
   }
@@ -411,7 +460,7 @@ async function renderPeakMode(mode, spots) {
 
   _peakCache.set(key, results);
   list.innerHTML = results.map((e, i) => rowHtml(e, i + 1)).join('');
-  status.textContent = `Top ${results.length} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
+  status.textContent = `Top ${results.length} ${_currentSource} — peak in ${mode === 'week' ? 'next 7 days' : 'days 7-14 (GFS only)'}`;
   wireRowClicks(list);
 }
 
