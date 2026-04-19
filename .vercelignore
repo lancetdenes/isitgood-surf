@@ -3,6 +3,8 @@ server.js
 Dockerfile
 fly.toml
 .dockerignore
-data/
+# Only ignore the *root* data/ (grib/gfs/ecmwf/reference) — not public/data/
+# which holds shipped static JSON (named-spots, coast-points).
+/data/
 node_modules/
 .github/
