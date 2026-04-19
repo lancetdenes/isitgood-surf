@@ -64,6 +64,7 @@ class App {
 
   async _loadLatestRun() {
     setStatus('Finding latest data...');
+    invalidatePumpingCache();
 
     const config = window.SURF_CONFIG || {};
     const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
@@ -219,6 +220,7 @@ class App {
   setModel(model) {
     if (model === this.model) return;
     this.model = model;
+    invalidatePumpingCache();
     this._loadLatestRun();
   }
 
