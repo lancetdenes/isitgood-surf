@@ -255,10 +255,26 @@ function wireRowClicks(list) {
 }
 
 async function onRowClick(la, ln, peakHour) {
-  // Full integration wired in Task 19. For now: close panel and fly the map.
   closePumpingPanel();
   if (_appRef?.map) _appRef.map.flyTo({ center: [ln, la], zoom: 10, speed: 1.5 });
-  if (peakHour != null && _appRef?.setHour) _appRef.setHour(peakHour);
+
+  // Peak-mode clicks jump the timeline to the peak hour first so the rating
+  // panel that opens reflects that hour's forecast.
+  if (peakHour != null && _appRef?.setHourAsync) {
+    await _appRef.setHourAsync(peakHour);
+  }
+
+  // Import lazily to avoid a top-level circular import with app.js.
+  const { openPanel, updatePanelSpotName } = await import('./panel.js');
+  const { loadCoastline, findNearestCoast, reverseGeocode } = await import('./coastline.js');
+  try {
+    await loadCoastline();
+  } catch (e) { /* coastline is best-effort; panel works without it */ }
+  const coast = findNearestCoast(la, ln);
+  const geocodePromise = reverseGeocode(la, ln);
+  await openPanel(la, ln, coast, _appRef.dataPath, _appRef.runTime, _appRef.hour,
+                  (url) => _appRef._cachedLoadGrid(url));
+  geocodePromise.then(name => { if (name) updatePanelSpotName(name); });
 }
 
 function spinnerHtml(text) {
