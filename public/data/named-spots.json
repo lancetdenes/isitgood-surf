@@ -1,0 +1,3663 @@
+[
+  {
+    "n": "Higgins Beach",
+    "r": "Maine, US",
+    "la": 43.56,
+    "ln": -70.23,
+    "o": null
+  },
+  {
+    "n": "Hampton Beach",
+    "r": "New Hampshire, US",
+    "la": 42.91,
+    "ln": -70.81,
+    "o": null
+  },
+  {
+    "n": "Nantasket",
+    "r": "Massachusetts, US",
+    "la": 42.27,
+    "ln": -70.87,
+    "o": null
+  },
+  {
+    "n": "Narragansett",
+    "r": "Rhode Island, US",
+    "la": 41.43,
+    "ln": -71.46,
+    "o": null
+  },
+  {
+    "n": "Montauk",
+    "r": "New York, US",
+    "la": 41.04,
+    "ln": -71.94,
+    "o": null
+  },
+  {
+    "n": "Rockaway Beach",
+    "r": "New York, US",
+    "la": 40.58,
+    "ln": -73.81,
+    "o": null
+  },
+  {
+    "n": "Long Beach",
+    "r": "New York, US",
+    "la": 40.58,
+    "ln": -73.66,
+    "o": null
+  },
+  {
+    "n": "Manasquan Inlet",
+    "r": "New Jersey, US",
+    "la": 40.11,
+    "ln": -74.03,
+    "o": null
+  },
+  {
+    "n": "Long Beach Island",
+    "r": "New Jersey, US",
+    "la": 39.63,
+    "ln": -74.19,
+    "o": null
+  },
+  {
+    "n": "Ocean City NJ",
+    "r": "New Jersey, US",
+    "la": 39.28,
+    "ln": -74.58,
+    "o": null
+  },
+  {
+    "n": "Ocean City MD",
+    "r": "Maryland, US",
+    "la": 38.34,
+    "ln": -75.08,
+    "o": null
+  },
+  {
+    "n": "Virginia Beach",
+    "r": "Virginia, US",
+    "la": 36.83,
+    "ln": -75.97,
+    "o": null
+  },
+  {
+    "n": "Outer Banks",
+    "r": "North Carolina, US",
+    "la": 35.9,
+    "ln": -75.6,
+    "o": null
+  },
+  {
+    "n": "Cape Hatteras",
+    "r": "North Carolina, US",
+    "la": 35.22,
+    "ln": -75.63,
+    "o": null
+  },
+  {
+    "n": "Wrightsville Beach",
+    "r": "North Carolina, US",
+    "la": 34.21,
+    "ln": -77.8,
+    "o": null
+  },
+  {
+    "n": "Folly Beach",
+    "r": "South Carolina, US",
+    "la": 32.65,
+    "ln": -79.94,
+    "o": null
+  },
+  {
+    "n": "Tybee Island",
+    "r": "Georgia, US",
+    "la": 32,
+    "ln": -80.84,
+    "o": null
+  },
+  {
+    "n": "Jacksonville Beach",
+    "r": "Florida, US",
+    "la": 30.29,
+    "ln": -81.39,
+    "o": null
+  },
+  {
+    "n": "St Augustine",
+    "r": "Florida, US",
+    "la": 29.86,
+    "ln": -81.27,
+    "o": null
+  },
+  {
+    "n": "New Smyrna Beach",
+    "r": "Florida, US",
+    "la": 29.03,
+    "ln": -80.92,
+    "o": null
+  },
+  {
+    "n": "Cocoa Beach",
+    "r": "Florida, US",
+    "la": 28.32,
+    "ln": -80.61,
+    "o": null
+  },
+  {
+    "n": "Sebastian Inlet",
+    "r": "Florida, US",
+    "la": 27.86,
+    "ln": -80.45,
+    "o": null
+  },
+  {
+    "n": "Palm Beach",
+    "r": "Florida, US",
+    "la": 26.71,
+    "ln": -80.03,
+    "o": null
+  },
+  {
+    "n": "Deerfield Beach",
+    "r": "Florida, US",
+    "la": 26.32,
+    "ln": -80.07,
+    "o": null
+  },
+  {
+    "n": "Pensacola",
+    "r": "Florida Gulf, US",
+    "la": 30.33,
+    "ln": -87.14,
+    "o": null
+  },
+  {
+    "n": "Gulf Shores",
+    "r": "Alabama, US",
+    "la": 30.24,
+    "ln": -87.7,
+    "o": null
+  },
+  {
+    "n": "South Padre Island",
+    "r": "Texas, US",
+    "la": 26.07,
+    "ln": -97.17,
+    "o": null
+  },
+  {
+    "n": "Seaside",
+    "r": "Oregon, US",
+    "la": 45.98,
+    "ln": -123.93,
+    "o": null
+  },
+  {
+    "n": "Pacific City",
+    "r": "Oregon, US",
+    "la": 45.2,
+    "ln": -123.97,
+    "o": null
+  },
+  {
+    "n": "Mavericks",
+    "r": "California, US",
+    "la": 37.49,
+    "ln": -122.5,
+    "o": null
+  },
+  {
+    "n": "Ocean Beach SF",
+    "r": "California, US",
+    "la": 37.76,
+    "ln": -122.51,
+    "o": null
+  },
+  {
+    "n": "Santa Cruz",
+    "r": "California, US",
+    "la": 36.96,
+    "ln": -122.03,
+    "o": null
+  },
+  {
+    "n": "Steamer Lane",
+    "r": "California, US",
+    "la": 36.95,
+    "ln": -122.02,
+    "o": null
+  },
+  {
+    "n": "Morro Bay",
+    "r": "California, US",
+    "la": 35.37,
+    "ln": -120.87,
+    "o": null
+  },
+  {
+    "n": "Pismo Beach",
+    "r": "California, US",
+    "la": 35.14,
+    "ln": -120.64,
+    "o": null
+  },
+  {
+    "n": "Rincon",
+    "r": "California, US",
+    "la": 34.37,
+    "ln": -119.48,
+    "o": null
+  },
+  {
+    "n": "Ventura",
+    "r": "California, US",
+    "la": 34.27,
+    "ln": -119.31,
+    "o": null
+  },
+  {
+    "n": "Malibu",
+    "r": "California, US",
+    "la": 34.04,
+    "ln": -118.68,
+    "o": null
+  },
+  {
+    "n": "Manhattan Beach",
+    "r": "California, US",
+    "la": 33.88,
+    "ln": -118.42,
+    "o": null
+  },
+  {
+    "n": "Huntington Beach",
+    "r": "California, US",
+    "la": 33.65,
+    "ln": -118,
+    "o": null
+  },
+  {
+    "n": "The Wedge",
+    "r": "California, US",
+    "la": 33.59,
+    "ln": -117.88,
+    "o": null
+  },
+  {
+    "n": "Trestles",
+    "r": "California, US",
+    "la": 33.38,
+    "ln": -117.59,
+    "o": null
+  },
+  {
+    "n": "Oceanside",
+    "r": "California, US",
+    "la": 33.19,
+    "ln": -117.39,
+    "o": null
+  },
+  {
+    "n": "Blacks Beach",
+    "r": "California, US",
+    "la": 32.88,
+    "ln": -117.25,
+    "o": null
+  },
+  {
+    "n": "Windansea",
+    "r": "California, US",
+    "la": 32.83,
+    "ln": -117.28,
+    "o": null
+  },
+  {
+    "n": "Imperial Beach",
+    "r": "California, US",
+    "la": 32.58,
+    "ln": -117.13,
+    "o": null
+  },
+  {
+    "n": "Todos Santos",
+    "r": "Baja, Mexico",
+    "la": 23.45,
+    "ln": -110.23,
+    "o": null
+  },
+  {
+    "n": "San Miguel",
+    "r": "Baja, Mexico",
+    "la": 31.98,
+    "ln": -116.88,
+    "o": null
+  },
+  {
+    "n": "Pipeline",
+    "r": "Oahu, Hawaii",
+    "la": 21.66,
+    "ln": -158.05,
+    "o": null
+  },
+  {
+    "n": "Sunset Beach",
+    "r": "Oahu, Hawaii",
+    "la": 21.68,
+    "ln": -158.04,
+    "o": null
+  },
+  {
+    "n": "Waimea Bay",
+    "r": "Oahu, Hawaii",
+    "la": 21.64,
+    "ln": -158.07,
+    "o": null
+  },
+  {
+    "n": "Haleiwa",
+    "r": "Oahu, Hawaii",
+    "la": 21.59,
+    "ln": -158.11,
+    "o": null
+  },
+  {
+    "n": "Ala Moana",
+    "r": "Oahu, Hawaii",
+    "la": 21.29,
+    "ln": -157.85,
+    "o": null
+  },
+  {
+    "n": "Jaws (Peahi)",
+    "r": "Maui, Hawaii",
+    "la": 20.94,
+    "ln": -156.22,
+    "o": null
+  },
+  {
+    "n": "Honolua Bay",
+    "r": "Maui, Hawaii",
+    "la": 21.01,
+    "ln": -156.64,
+    "o": null
+  },
+  {
+    "n": "Hookipa",
+    "r": "Maui, Hawaii",
+    "la": 20.93,
+    "ln": -156.36,
+    "o": null
+  },
+  {
+    "n": "Puerto Escondido",
+    "r": "Oaxaca, Mexico",
+    "la": 15.86,
+    "ln": -97.07,
+    "o": null
+  },
+  {
+    "n": "Sayulita",
+    "r": "Nayarit, Mexico",
+    "la": 20.87,
+    "ln": -105.44,
+    "o": null
+  },
+  {
+    "n": "Witch's Rock",
+    "r": "Costa Rica",
+    "la": 10.8,
+    "ln": -85.82,
+    "o": null
+  },
+  {
+    "n": "Playa Hermosa",
+    "r": "Costa Rica",
+    "la": 9.56,
+    "ln": -84.58,
+    "o": null
+  },
+  {
+    "n": "Pavones",
+    "r": "Costa Rica",
+    "la": 8.39,
+    "ln": -83.15,
+    "o": null
+  },
+  {
+    "n": "Santa Catalina",
+    "r": "Panama",
+    "la": 7.64,
+    "ln": -81.24,
+    "o": null
+  },
+  {
+    "n": "Bocas del Toro",
+    "r": "Panama",
+    "la": 9.34,
+    "ln": -82.24,
+    "o": null
+  },
+  {
+    "n": "Punta Mango",
+    "r": "El Salvador",
+    "la": 13.18,
+    "ln": -88.04,
+    "o": null
+  },
+  {
+    "n": "El Tunco",
+    "r": "El Salvador",
+    "la": 13.49,
+    "ln": -89.38,
+    "o": null
+  },
+  {
+    "n": "Rincon PR",
+    "r": "Puerto Rico",
+    "la": 18.34,
+    "ln": -67.25,
+    "o": null
+  },
+  {
+    "n": "Domes",
+    "r": "Puerto Rico",
+    "la": 18.35,
+    "ln": -67.26,
+    "o": null
+  },
+  {
+    "n": "Barbados Soup Bowl",
+    "r": "Barbados",
+    "la": 13.22,
+    "ln": -59.49,
+    "o": null
+  },
+  {
+    "n": "Chicama",
+    "r": "Peru",
+    "la": -7.84,
+    "ln": -79.45,
+    "o": null
+  },
+  {
+    "n": "Máncora",
+    "r": "Peru",
+    "la": -4.1,
+    "ln": -81.06,
+    "o": null
+  },
+  {
+    "n": "Lobitos",
+    "r": "Peru",
+    "la": -4.45,
+    "ln": -81.28,
+    "o": null
+  },
+  {
+    "n": "Punta de Lobos",
+    "r": "Chile",
+    "la": -34.42,
+    "ln": -72.05,
+    "o": null
+  },
+  {
+    "n": "Arica",
+    "r": "Chile",
+    "la": -18.48,
+    "ln": -70.33,
+    "o": null
+  },
+  {
+    "n": "Pichilemu",
+    "r": "Chile",
+    "la": -34.39,
+    "ln": -72.04,
+    "o": null
+  },
+  {
+    "n": "Saquarema",
+    "r": "Brazil",
+    "la": -22.93,
+    "ln": -42.48,
+    "o": null
+  },
+  {
+    "n": "Florianópolis",
+    "r": "Brazil",
+    "la": -27.6,
+    "ln": -48.44,
+    "o": null
+  },
+  {
+    "n": "Itacaré",
+    "r": "Brazil",
+    "la": -14.28,
+    "ln": -38.98,
+    "o": null
+  },
+  {
+    "n": "Fernando de Noronha",
+    "r": "Brazil",
+    "la": -3.85,
+    "ln": -32.43,
+    "o": null
+  },
+  {
+    "n": "Mar del Plata",
+    "r": "Argentina",
+    "la": -38,
+    "ln": -57.56,
+    "o": null
+  },
+  {
+    "n": "Nazaré",
+    "r": "Portugal",
+    "la": 39.6,
+    "ln": -9.07,
+    "o": null
+  },
+  {
+    "n": "Peniche",
+    "r": "Portugal",
+    "la": 39.35,
+    "ln": -9.38,
+    "o": null
+  },
+  {
+    "n": "Supertubos",
+    "r": "Portugal",
+    "la": 39.34,
+    "ln": -9.37,
+    "o": null
+  },
+  {
+    "n": "Ericeira",
+    "r": "Portugal",
+    "la": 38.97,
+    "ln": -9.42,
+    "o": null
+  },
+  {
+    "n": "Coxos",
+    "r": "Portugal",
+    "la": 38.99,
+    "ln": -9.42,
+    "o": null
+  },
+  {
+    "n": "Sagres",
+    "r": "Portugal",
+    "la": 37.01,
+    "ln": -8.95,
+    "o": null
+  },
+  {
+    "n": "Mundaka",
+    "r": "Basque, Spain",
+    "la": 43.41,
+    "ln": -2.7,
+    "o": null
+  },
+  {
+    "n": "Zarautz",
+    "r": "Basque, Spain",
+    "la": 43.28,
+    "ln": -2.17,
+    "o": null
+  },
+  {
+    "n": "Lanzarote",
+    "r": "Canary Is., Spain",
+    "la": 29.05,
+    "ln": -13.63,
+    "o": null
+  },
+  {
+    "n": "Fuerteventura",
+    "r": "Canary Is., Spain",
+    "la": 28.39,
+    "ln": -14,
+    "o": null
+  },
+  {
+    "n": "Tenerife",
+    "r": "Canary Is., Spain",
+    "la": 28.13,
+    "ln": -16.75,
+    "o": null
+  },
+  {
+    "n": "Hossegor",
+    "r": "France",
+    "la": 43.66,
+    "ln": -1.44,
+    "o": null
+  },
+  {
+    "n": "Anglet",
+    "r": "France",
+    "la": 43.51,
+    "ln": -1.53,
+    "o": null
+  },
+  {
+    "n": "Lacanau",
+    "r": "France",
+    "la": 45,
+    "ln": -1.2,
+    "o": null
+  },
+  {
+    "n": "Biarritz",
+    "r": "France",
+    "la": 43.48,
+    "ln": -1.56,
+    "o": null
+  },
+  {
+    "n": "Fistral Beach",
+    "r": "Cornwall, UK",
+    "la": 50.42,
+    "ln": -5.1,
+    "o": null
+  },
+  {
+    "n": "Croyde Bay",
+    "r": "Devon, UK",
+    "la": 51.13,
+    "ln": -4.24,
+    "o": null
+  },
+  {
+    "n": "Thurso East",
+    "r": "Scotland, UK",
+    "la": 58.6,
+    "ln": -3.5,
+    "o": null
+  },
+  {
+    "n": "Bundoran",
+    "r": "Ireland",
+    "la": 54.47,
+    "ln": -8.28,
+    "o": null
+  },
+  {
+    "n": "Mullaghmore",
+    "r": "Ireland",
+    "la": 54.47,
+    "ln": -8.45,
+    "o": null
+  },
+  {
+    "n": "Lahinch",
+    "r": "Ireland",
+    "la": 52.93,
+    "ln": -9.35,
+    "o": null
+  },
+  {
+    "n": "Lofoten",
+    "r": "Norway",
+    "la": 68.15,
+    "ln": 14,
+    "o": null
+  },
+  {
+    "n": "Hoddevik",
+    "r": "Norway",
+    "la": 62.11,
+    "ln": 5.14,
+    "o": null
+  },
+  {
+    "n": "Klitmøller",
+    "r": "Denmark",
+    "la": 57.04,
+    "ln": 8.46,
+    "o": null
+  },
+  {
+    "n": "Jeffreys Bay",
+    "r": "South Africa",
+    "la": -34.05,
+    "ln": 25,
+    "o": null
+  },
+  {
+    "n": "Dungeons",
+    "r": "Cape Town, SA",
+    "la": -34.1,
+    "ln": 18.35,
+    "o": null
+  },
+  {
+    "n": "Muizenberg",
+    "r": "Cape Town, SA",
+    "la": -34.11,
+    "ln": 18.47,
+    "o": null
+  },
+  {
+    "n": "Skeleton Bay",
+    "r": "Namibia",
+    "la": -22.63,
+    "ln": 14.52,
+    "o": null
+  },
+  {
+    "n": "Taghazout",
+    "r": "Morocco",
+    "la": 30.54,
+    "ln": -9.71,
+    "o": null
+  },
+  {
+    "n": "Anchor Point",
+    "r": "Morocco",
+    "la": 30.53,
+    "ln": -9.74,
+    "o": null
+  },
+  {
+    "n": "Imsouane",
+    "r": "Morocco",
+    "la": 30.84,
+    "ln": -9.82,
+    "o": null
+  },
+  {
+    "n": "Dakar",
+    "r": "Senegal",
+    "la": 14.73,
+    "ln": -17.51,
+    "o": null
+  },
+  {
+    "n": "Durban",
+    "r": "South Africa",
+    "la": -29.87,
+    "ln": 31.05,
+    "o": null
+  },
+  {
+    "n": "Uluwatu",
+    "r": "Bali",
+    "la": -8.81,
+    "ln": 115.09,
+    "o": null
+  },
+  {
+    "n": "Padang Padang",
+    "r": "Bali",
+    "la": -8.81,
+    "ln": 115.1,
+    "o": null
+  },
+  {
+    "n": "Canggu",
+    "r": "Bali",
+    "la": -8.65,
+    "ln": 115.13,
+    "o": null
+  },
+  {
+    "n": "Keramas",
+    "r": "Bali",
+    "la": -8.59,
+    "ln": 115.43,
+    "o": null
+  },
+  {
+    "n": "G-Land",
+    "r": "Java",
+    "la": -8.74,
+    "ln": 114.37,
+    "o": null
+  },
+  {
+    "n": "Desert Point",
+    "r": "Lombok",
+    "la": -8.75,
+    "ln": 115.83,
+    "o": null
+  },
+  {
+    "n": "Nias",
+    "r": "Sumatra",
+    "la": 1.1,
+    "ln": 97.55,
+    "o": null
+  },
+  {
+    "n": "Mentawai Islands",
+    "r": "Sumatra",
+    "la": -2.1,
+    "ln": 99,
+    "o": null
+  },
+  {
+    "n": "Krui",
+    "r": "Sumatra",
+    "la": -5.2,
+    "ln": 104.1,
+    "o": null
+  },
+  {
+    "n": "Sumbawa",
+    "r": "Indonesia",
+    "la": -8.8,
+    "ln": 118,
+    "o": null
+  },
+  {
+    "n": "Rote Island",
+    "r": "Indonesia",
+    "la": -10.71,
+    "ln": 123.1,
+    "o": null
+  },
+  {
+    "n": "Arugam Bay",
+    "r": "Sri Lanka",
+    "la": 6.84,
+    "ln": 81.83,
+    "o": null
+  },
+  {
+    "n": "Hikkaduwa",
+    "r": "Sri Lanka",
+    "la": 6.14,
+    "ln": 80.1,
+    "o": null
+  },
+  {
+    "n": "Tamarin Bay",
+    "r": "Mauritius",
+    "la": -20.33,
+    "ln": 57.37,
+    "o": null
+  },
+  {
+    "n": "St Leu",
+    "r": "Réunion",
+    "la": -21.17,
+    "ln": 55.29,
+    "o": null
+  },
+  {
+    "n": "Maldives",
+    "r": "Maldives",
+    "la": 3.2,
+    "ln": 73.22,
+    "o": null
+  },
+  {
+    "n": "Teahupoo",
+    "r": "Tahiti",
+    "la": -17.87,
+    "ln": -149.26,
+    "o": null
+  },
+  {
+    "n": "Papara",
+    "r": "Tahiti",
+    "la": -17.75,
+    "ln": -149.5,
+    "o": null
+  },
+  {
+    "n": "Cloudbreak",
+    "r": "Fiji",
+    "la": -17.87,
+    "ln": 177.19,
+    "o": null
+  },
+  {
+    "n": "Restaurants",
+    "r": "Fiji",
+    "la": -17.87,
+    "ln": 177.2,
+    "o": null
+  },
+  {
+    "n": "Namotu Left",
+    "r": "Fiji",
+    "la": -17.88,
+    "ln": 177.17,
+    "o": null
+  },
+  {
+    "n": "P-Pass",
+    "r": "Micronesia",
+    "la": 6.9,
+    "ln": 158.25,
+    "o": null
+  },
+  {
+    "n": "Siargao",
+    "r": "Philippines",
+    "la": 9.85,
+    "ln": 126.17,
+    "o": null
+  },
+  {
+    "n": "La Union",
+    "r": "Philippines",
+    "la": 16.62,
+    "ln": 120.32,
+    "o": null
+  },
+  {
+    "n": "Shonan",
+    "r": "Japan",
+    "la": 35.3,
+    "ln": 139.48,
+    "o": null
+  },
+  {
+    "n": "Niijima",
+    "r": "Japan",
+    "la": 34.37,
+    "ln": 139.27,
+    "o": null
+  },
+  {
+    "n": "Shikoku",
+    "r": "Japan",
+    "la": 33.55,
+    "ln": 133.65,
+    "o": null
+  },
+  {
+    "n": "Miyazaki",
+    "r": "Japan",
+    "la": 31.91,
+    "ln": 131.42,
+    "o": null
+  },
+  {
+    "n": "Snapper Rocks",
+    "r": "Gold Coast, AU",
+    "la": -28.16,
+    "ln": 153.55,
+    "o": null
+  },
+  {
+    "n": "Kirra",
+    "r": "Gold Coast, AU",
+    "la": -28.17,
+    "ln": 153.54,
+    "o": null
+  },
+  {
+    "n": "Burleigh Heads",
+    "r": "Gold Coast, AU",
+    "la": -28.09,
+    "ln": 153.45,
+    "o": null
+  },
+  {
+    "n": "Duranbah",
+    "r": "Gold Coast, AU",
+    "la": -28.17,
+    "ln": 153.56,
+    "o": null
+  },
+  {
+    "n": "North Narrabeen",
+    "r": "Sydney, AU",
+    "la": -33.71,
+    "ln": 151.3,
+    "o": null
+  },
+  {
+    "n": "Manly",
+    "r": "Sydney, AU",
+    "la": -33.8,
+    "ln": 151.29,
+    "o": null
+  },
+  {
+    "n": "Cronulla",
+    "r": "Sydney, AU",
+    "la": -34.06,
+    "ln": 151.16,
+    "o": null
+  },
+  {
+    "n": "Noosa",
+    "r": "Queensland, AU",
+    "la": -26.38,
+    "ln": 153.1,
+    "o": null
+  },
+  {
+    "n": "Agnes Water",
+    "r": "Queensland, AU",
+    "la": -24.21,
+    "ln": 151.9,
+    "o": null
+  },
+  {
+    "n": "Bells Beach",
+    "r": "Victoria, AU",
+    "la": -38.37,
+    "ln": 144.28,
+    "o": null
+  },
+  {
+    "n": "Torquay",
+    "r": "Victoria, AU",
+    "la": -38.33,
+    "ln": 144.32,
+    "o": null
+  },
+  {
+    "n": "Phillip Island",
+    "r": "Victoria, AU",
+    "la": -38.5,
+    "ln": 145.24,
+    "o": null
+  },
+  {
+    "n": "Margaret River",
+    "r": "Western AU",
+    "la": -33.95,
+    "ln": 114.99,
+    "o": null
+  },
+  {
+    "n": "The Box",
+    "r": "Western AU",
+    "la": -33.95,
+    "ln": 115,
+    "o": null
+  },
+  {
+    "n": "Rottnest Island",
+    "r": "Western AU",
+    "la": -32,
+    "ln": 115.5,
+    "o": null
+  },
+  {
+    "n": "Cactus Beach",
+    "r": "South AU",
+    "la": -31.93,
+    "ln": 131.81,
+    "o": null
+  },
+  {
+    "n": "Raglan",
+    "r": "New Zealand",
+    "la": -37.8,
+    "ln": 174.82,
+    "o": null
+  },
+  {
+    "n": "Piha",
+    "r": "New Zealand",
+    "la": -36.95,
+    "ln": 174.47,
+    "o": null
+  },
+  {
+    "n": "Mount Maunganui",
+    "r": "New Zealand",
+    "la": -37.64,
+    "ln": 176.18,
+    "o": null
+  },
+  {
+    "n": "Iquique",
+    "r": "Chile",
+    "la": -20.21,
+    "ln": -70.15,
+    "o": null
+  },
+  {
+    "n": "Huanchaco",
+    "r": "Peru",
+    "la": -8.08,
+    "ln": -79.12,
+    "o": null
+  },
+  {
+    "n": "Montañita",
+    "r": "Ecuador",
+    "la": -1.83,
+    "ln": -80.75,
+    "o": null
+  },
+  {
+    "n": "Guéthary",
+    "r": "France",
+    "la": 43.42,
+    "ln": -1.61,
+    "o": null
+  },
+  {
+    "n": "Caparica",
+    "r": "Portugal",
+    "la": 38.63,
+    "ln": -9.24,
+    "o": null
+  },
+  {
+    "n": "Peniche Baleal",
+    "r": "Portugal",
+    "la": 39.37,
+    "ln": -9.34,
+    "o": null
+  },
+  {
+    "n": "Agadir",
+    "r": "Morocco",
+    "la": 30.43,
+    "ln": -9.6,
+    "o": null
+  },
+  {
+    "n": "Jeffreys Bay Inner",
+    "r": "South Africa",
+    "la": -34.04,
+    "ln": 24.93,
+    "o": null
+  },
+  {
+    "n": "Banzai Pipeline",
+    "r": "Oahu",
+    "la": 21.67,
+    "ln": -158.05,
+    "o": null
+  },
+  {
+    "n": "Rocky Point",
+    "r": "Oahu",
+    "la": 21.67,
+    "ln": -158.04,
+    "o": null
+  },
+  {
+    "n": "Pohoiki",
+    "r": "Big Island, HI",
+    "la": 19.46,
+    "ln": -154.85,
+    "o": null
+  },
+  {
+    "n": "Hanalei Bay",
+    "r": "Kauai, HI",
+    "la": 22.21,
+    "ln": -159.5,
+    "o": null
+  },
+  {
+    "n": "Tofino",
+    "r": "British Columbia, CA",
+    "la": 49.15,
+    "ln": -125.91,
+    "o": null
+  },
+  {
+    "n": "Cox Bay",
+    "r": "British Columbia, CA",
+    "la": 49.11,
+    "ln": -125.89,
+    "o": null
+  },
+  {
+    "n": "Long Beach BC",
+    "r": "British Columbia, CA",
+    "la": 49.06,
+    "ln": -125.77,
+    "o": null
+  },
+  {
+    "n": "Chesterman Beach",
+    "r": "British Columbia, CA",
+    "la": 49.14,
+    "ln": -125.89,
+    "o": null
+  },
+  {
+    "n": "Lawrencetown",
+    "r": "Nova Scotia, CA",
+    "la": 44.64,
+    "ln": -63.35,
+    "o": null
+  },
+  {
+    "n": "Yakutat",
+    "r": "Alaska, US",
+    "la": 59.55,
+    "ln": -139.73,
+    "o": null
+  },
+  {
+    "n": "Icy Bay",
+    "r": "Alaska, US",
+    "la": 59.95,
+    "ln": -141.4,
+    "o": null
+  },
+  {
+    "n": "Sitka",
+    "r": "Alaska, US",
+    "la": 57.05,
+    "ln": -135.33,
+    "o": null
+  },
+  {
+    "n": "Cannon Beach",
+    "r": "Oregon, US",
+    "la": 45.89,
+    "ln": -123.97,
+    "o": null
+  },
+  {
+    "n": "Oswald West",
+    "r": "Oregon, US",
+    "la": 45.75,
+    "ln": -123.96,
+    "o": null
+  },
+  {
+    "n": "Nehalem",
+    "r": "Oregon, US",
+    "la": 45.72,
+    "ln": -123.93,
+    "o": null
+  },
+  {
+    "n": "Newport OR",
+    "r": "Oregon, US",
+    "la": 44.64,
+    "ln": -124.05,
+    "o": null
+  },
+  {
+    "n": "Florence OR",
+    "r": "Oregon, US",
+    "la": 43.98,
+    "ln": -124.11,
+    "o": null
+  },
+  {
+    "n": "Gold Beach",
+    "r": "Oregon, US",
+    "la": 42.41,
+    "ln": -124.42,
+    "o": null
+  },
+  {
+    "n": "La Push",
+    "r": "Washington, US",
+    "la": 47.91,
+    "ln": -124.64,
+    "o": null
+  },
+  {
+    "n": "Westport WA",
+    "r": "Washington, US",
+    "la": 46.88,
+    "ln": -124.11,
+    "o": null
+  },
+  {
+    "n": "Cape Disappointment",
+    "r": "Washington, US",
+    "la": 46.29,
+    "ln": -124.08,
+    "o": null
+  },
+  {
+    "n": "Pacifica",
+    "r": "California, US",
+    "la": 37.6,
+    "ln": -122.49,
+    "o": null
+  },
+  {
+    "n": "Half Moon Bay",
+    "r": "California, US",
+    "la": 37.46,
+    "ln": -122.44,
+    "o": null
+  },
+  {
+    "n": "Pleasure Point",
+    "r": "California, US",
+    "la": 36.96,
+    "ln": -121.97,
+    "o": null
+  },
+  {
+    "n": "Capitola",
+    "r": "California, US",
+    "la": 36.97,
+    "ln": -121.95,
+    "o": null
+  },
+  {
+    "n": "Pebble Beach",
+    "r": "California, US",
+    "la": 36.57,
+    "ln": -121.95,
+    "o": null
+  },
+  {
+    "n": "Jalama Beach",
+    "r": "California, US",
+    "la": 34.51,
+    "ln": -120.5,
+    "o": null
+  },
+  {
+    "n": "El Capitan",
+    "r": "California, US",
+    "la": 34.47,
+    "ln": -120.02,
+    "o": null
+  },
+  {
+    "n": "Refugio",
+    "r": "California, US",
+    "la": 34.46,
+    "ln": -120.07,
+    "o": null
+  },
+  {
+    "n": "County Line",
+    "r": "California, US",
+    "la": 34.06,
+    "ln": -118.97,
+    "o": null
+  },
+  {
+    "n": "Zuma",
+    "r": "California, US",
+    "la": 34.02,
+    "ln": -118.83,
+    "o": null
+  },
+  {
+    "n": "Sunset Beach CA",
+    "r": "California, US",
+    "la": 33.71,
+    "ln": -118.07,
+    "o": null
+  },
+  {
+    "n": "Bolsa Chica",
+    "r": "California, US",
+    "la": 33.68,
+    "ln": -118.04,
+    "o": null
+  },
+  {
+    "n": "Seal Beach",
+    "r": "California, US",
+    "la": 33.74,
+    "ln": -118.11,
+    "o": null
+  },
+  {
+    "n": "Newport Beach",
+    "r": "California, US",
+    "la": 33.6,
+    "ln": -117.93,
+    "o": null
+  },
+  {
+    "n": "Salt Creek",
+    "r": "California, US",
+    "la": 33.48,
+    "ln": -117.72,
+    "o": null
+  },
+  {
+    "n": "Swami's",
+    "r": "California, US",
+    "la": 33.04,
+    "ln": -117.29,
+    "o": null
+  },
+  {
+    "n": "Cardiff Reef",
+    "r": "California, US",
+    "la": 33.02,
+    "ln": -117.28,
+    "o": null
+  },
+  {
+    "n": "Scripps Pier",
+    "r": "California, US",
+    "la": 32.87,
+    "ln": -117.25,
+    "o": null
+  },
+  {
+    "n": "Sunset Cliffs",
+    "r": "California, US",
+    "la": 32.72,
+    "ln": -117.26,
+    "o": null
+  },
+  {
+    "n": "Puerto Nuevo",
+    "r": "Baja, Mexico",
+    "la": 32.39,
+    "ln": -117.07,
+    "o": null
+  },
+  {
+    "n": "K38",
+    "r": "Baja, Mexico",
+    "la": 32.35,
+    "ln": -117.05,
+    "o": null
+  },
+  {
+    "n": "Scorpion Bay",
+    "r": "Baja, Mexico",
+    "la": 26.72,
+    "ln": -113.42,
+    "o": null
+  },
+  {
+    "n": "La Saladita",
+    "r": "Guerrero, Mexico",
+    "la": 17.68,
+    "ln": -101.26,
+    "o": null
+  },
+  {
+    "n": "Zipolite",
+    "r": "Oaxaca, Mexico",
+    "la": 15.66,
+    "ln": -96.51,
+    "o": null
+  },
+  {
+    "n": "Barra de la Cruz",
+    "r": "Oaxaca, Mexico",
+    "la": 15.82,
+    "ln": -96.16,
+    "o": null
+  },
+  {
+    "n": "Troncones",
+    "r": "Guerrero, Mexico",
+    "la": 17.78,
+    "ln": -101.74,
+    "o": null
+  },
+  {
+    "n": "Punta Mita",
+    "r": "Nayarit, Mexico",
+    "la": 20.77,
+    "ln": -105.54,
+    "o": null
+  },
+  {
+    "n": "Pascuales",
+    "r": "Colima, Mexico",
+    "la": 18.84,
+    "ln": -104.09,
+    "o": null
+  },
+  {
+    "n": "Popoyo",
+    "r": "Nicaragua",
+    "la": 11.52,
+    "ln": -86.09,
+    "o": null
+  },
+  {
+    "n": "Maderas",
+    "r": "Nicaragua",
+    "la": 11.25,
+    "ln": -85.88,
+    "o": null
+  },
+  {
+    "n": "Playa Colorado",
+    "r": "Nicaragua",
+    "la": 11.5,
+    "ln": -86.06,
+    "o": null
+  },
+  {
+    "n": "The Boom",
+    "r": "Nicaragua",
+    "la": 12.02,
+    "ln": -86.39,
+    "o": null
+  },
+  {
+    "n": "Playa Hermosa Nica",
+    "r": "Nicaragua",
+    "la": 11.5,
+    "ln": -86.07,
+    "o": null
+  },
+  {
+    "n": "El Transito",
+    "r": "Nicaragua",
+    "la": 12.43,
+    "ln": -86.79,
+    "o": null
+  },
+  {
+    "n": "Playa Grande",
+    "r": "Costa Rica",
+    "la": 10.32,
+    "ln": -85.85,
+    "o": null
+  },
+  {
+    "n": "Tamarindo",
+    "r": "Costa Rica",
+    "la": 10.29,
+    "ln": -85.85,
+    "o": null
+  },
+  {
+    "n": "Nosara",
+    "r": "Costa Rica",
+    "la": 9.98,
+    "ln": -85.65,
+    "o": null
+  },
+  {
+    "n": "Dominical",
+    "r": "Costa Rica",
+    "la": 9.25,
+    "ln": -83.85,
+    "o": null
+  },
+  {
+    "n": "Puerto Viejo",
+    "r": "Costa Rica",
+    "la": 9.65,
+    "ln": -82.75,
+    "o": null
+  },
+  {
+    "n": "Las Flores",
+    "r": "El Salvador",
+    "la": 13.21,
+    "ln": -88.04,
+    "o": null
+  },
+  {
+    "n": "Sunzal",
+    "r": "El Salvador",
+    "la": 13.5,
+    "ln": -89.4,
+    "o": null
+  },
+  {
+    "n": "La Libertad",
+    "r": "El Salvador",
+    "la": 13.49,
+    "ln": -89.32,
+    "o": null
+  },
+  {
+    "n": "Punta Roca",
+    "r": "El Salvador",
+    "la": 13.49,
+    "ln": -89.32,
+    "o": null
+  },
+  {
+    "n": "Playa Venao",
+    "r": "Panama",
+    "la": 7.42,
+    "ln": -80.2,
+    "o": null
+  },
+  {
+    "n": "Playa Grande Panama",
+    "r": "Panama",
+    "la": 9.34,
+    "ln": -82.24,
+    "o": null
+  },
+  {
+    "n": "Middles",
+    "r": "Puerto Rico",
+    "la": 18.42,
+    "ln": -67.18,
+    "o": null
+  },
+  {
+    "n": "Tres Palmas",
+    "r": "Puerto Rico",
+    "la": 18.36,
+    "ln": -67.26,
+    "o": null
+  },
+  {
+    "n": "Jobos",
+    "r": "Puerto Rico",
+    "la": 18.49,
+    "ln": -66.62,
+    "o": null
+  },
+  {
+    "n": "Bathsheba",
+    "r": "Barbados",
+    "la": 13.22,
+    "ln": -59.53,
+    "o": null
+  },
+  {
+    "n": "Duppy's",
+    "r": "Barbados",
+    "la": 13.2,
+    "ln": -59.5,
+    "o": null
+  },
+  {
+    "n": "Cane Garden Bay",
+    "r": "British Virgin Islands",
+    "la": 18.43,
+    "ln": -64.64,
+    "o": null
+  },
+  {
+    "n": "Cabarete",
+    "r": "Dominican Republic",
+    "la": 19.76,
+    "ln": -70.42,
+    "o": null
+  },
+  {
+    "n": "Playa Encuentro",
+    "r": "Dominican Republic",
+    "la": 19.78,
+    "ln": -70.49,
+    "o": null
+  },
+  {
+    "n": "Maria's",
+    "r": "Puerto Rico",
+    "la": 18.35,
+    "ln": -67.27,
+    "o": null
+  },
+  {
+    "n": "Shacks",
+    "r": "Puerto Rico",
+    "la": 18.5,
+    "ln": -67.14,
+    "o": null
+  },
+  {
+    "n": "La Pared",
+    "r": "Ecuador",
+    "la": -1.93,
+    "ln": -80.76,
+    "o": null
+  },
+  {
+    "n": "Canoa",
+    "r": "Ecuador",
+    "la": -0.46,
+    "ln": -80.45,
+    "o": null
+  },
+  {
+    "n": "Mompiche",
+    "r": "Ecuador",
+    "la": 0.51,
+    "ln": -80.01,
+    "o": null
+  },
+  {
+    "n": "La Paloma",
+    "r": "Uruguay",
+    "la": -34.66,
+    "ln": -54.16,
+    "o": null
+  },
+  {
+    "n": "Punta del Diablo",
+    "r": "Uruguay",
+    "la": -34.04,
+    "ln": -53.55,
+    "o": null
+  },
+  {
+    "n": "Jose Ignacio",
+    "r": "Uruguay",
+    "la": -34.84,
+    "ln": -54.63,
+    "o": null
+  },
+  {
+    "n": "Pacasmayo",
+    "r": "Peru",
+    "la": -7.4,
+    "ln": -79.58,
+    "o": null
+  },
+  {
+    "n": "Cabo Blanco",
+    "r": "Peru",
+    "la": -4.25,
+    "ln": -81.23,
+    "o": null
+  },
+  {
+    "n": "Punta Hermosa",
+    "r": "Peru",
+    "la": -12.34,
+    "ln": -76.81,
+    "o": null
+  },
+  {
+    "n": "Barranca",
+    "r": "Peru",
+    "la": -10.74,
+    "ln": -77.76,
+    "o": null
+  },
+  {
+    "n": "El Gringo",
+    "r": "Chile",
+    "la": -18.41,
+    "ln": -70.32,
+    "o": null
+  },
+  {
+    "n": "Buchupureo",
+    "r": "Chile",
+    "la": -36.07,
+    "ln": -72.78,
+    "o": null
+  },
+  {
+    "n": "Maitencillo",
+    "r": "Chile",
+    "la": -32.65,
+    "ln": -71.44,
+    "o": null
+  },
+  {
+    "n": "Papudo",
+    "r": "Chile",
+    "la": -32.51,
+    "ln": -71.44,
+    "o": null
+  },
+  {
+    "n": "Cerritos",
+    "r": "Baja, Mexico",
+    "la": 23.33,
+    "ln": -110.17,
+    "o": null
+  },
+  {
+    "n": "Cerro Azul",
+    "r": "Peru",
+    "la": -13.02,
+    "ln": -76.49,
+    "o": null
+  },
+  {
+    "n": "Punta Paloma",
+    "r": "Argentina",
+    "la": -37.07,
+    "ln": -56.95,
+    "o": null
+  },
+  {
+    "n": "Praia Mole",
+    "r": "Brazil",
+    "la": -27.6,
+    "ln": -48.43,
+    "o": null
+  },
+  {
+    "n": "Ubatuba",
+    "r": "Brazil",
+    "la": -23.43,
+    "ln": -45.07,
+    "o": null
+  },
+  {
+    "n": "Ipanema",
+    "r": "Brazil",
+    "la": -22.99,
+    "ln": -43.21,
+    "o": null
+  },
+  {
+    "n": "Arpoador",
+    "r": "Brazil",
+    "la": -22.99,
+    "ln": -43.19,
+    "o": null
+  },
+  {
+    "n": "Joaquina",
+    "r": "Brazil",
+    "la": -27.63,
+    "ln": -48.45,
+    "o": null
+  },
+  {
+    "n": "Buzios",
+    "r": "Brazil",
+    "la": -22.75,
+    "ln": -41.88,
+    "o": null
+  },
+  {
+    "n": "Cacimba do Padre",
+    "r": "Brazil",
+    "la": -3.85,
+    "ln": -32.45,
+    "o": null
+  },
+  {
+    "n": "Watergate Bay",
+    "r": "Cornwall, UK",
+    "la": 50.45,
+    "ln": -5.05,
+    "o": null
+  },
+  {
+    "n": "Porthleven",
+    "r": "Cornwall, UK",
+    "la": 50.08,
+    "ln": -5.32,
+    "o": null
+  },
+  {
+    "n": "Sennen Cove",
+    "r": "Cornwall, UK",
+    "la": 50.08,
+    "ln": -5.7,
+    "o": null
+  },
+  {
+    "n": "Polzeath",
+    "r": "Cornwall, UK",
+    "la": 50.57,
+    "ln": -4.92,
+    "o": null
+  },
+  {
+    "n": "Gwithian",
+    "r": "Cornwall, UK",
+    "la": 50.22,
+    "ln": -5.39,
+    "o": null
+  },
+  {
+    "n": "Perranporth",
+    "r": "Cornwall, UK",
+    "la": 50.35,
+    "ln": -5.16,
+    "o": null
+  },
+  {
+    "n": "Woolacombe",
+    "r": "Devon, UK",
+    "la": 51.17,
+    "ln": -4.21,
+    "o": null
+  },
+  {
+    "n": "Bantham",
+    "r": "Devon, UK",
+    "la": 50.28,
+    "ln": -3.89,
+    "o": null
+  },
+  {
+    "n": "Freshwater West",
+    "r": "Wales, UK",
+    "la": 51.66,
+    "ln": -5.05,
+    "o": null
+  },
+  {
+    "n": "Rhossili",
+    "r": "Wales, UK",
+    "la": 51.57,
+    "ln": -4.29,
+    "o": null
+  },
+  {
+    "n": "Llangennith",
+    "r": "Wales, UK",
+    "la": 51.59,
+    "ln": -4.29,
+    "o": null
+  },
+  {
+    "n": "Hell's Mouth",
+    "r": "Wales, UK",
+    "la": 52.82,
+    "ln": -4.55,
+    "o": null
+  },
+  {
+    "n": "Pease Bay",
+    "r": "Scotland, UK",
+    "la": 55.94,
+    "ln": -2.31,
+    "o": null
+  },
+  {
+    "n": "Machrihanish",
+    "r": "Scotland, UK",
+    "la": 55.43,
+    "ln": -5.74,
+    "o": null
+  },
+  {
+    "n": "Tiree",
+    "r": "Scotland, UK",
+    "la": 56.5,
+    "ln": -6.87,
+    "o": null
+  },
+  {
+    "n": "Brandon Bay",
+    "r": "Ireland",
+    "la": 52.27,
+    "ln": -10,
+    "o": null
+  },
+  {
+    "n": "Easkey",
+    "r": "Ireland",
+    "la": 54.29,
+    "ln": -9.08,
+    "o": null
+  },
+  {
+    "n": "Strandhill",
+    "r": "Ireland",
+    "la": 54.27,
+    "ln": -8.6,
+    "o": null
+  },
+  {
+    "n": "Kilkee",
+    "r": "Ireland",
+    "la": 52.68,
+    "ln": -9.65,
+    "o": null
+  },
+  {
+    "n": "Rileys",
+    "r": "Ireland",
+    "la": 53.5,
+    "ln": -10.13,
+    "o": null
+  },
+  {
+    "n": "Thorlakshofn",
+    "r": "Iceland",
+    "la": 63.86,
+    "ln": -21.39,
+    "o": null
+  },
+  {
+    "n": "Sandvik",
+    "r": "Iceland",
+    "la": 63.82,
+    "ln": -22.73,
+    "o": null
+  },
+  {
+    "n": "Grindavik",
+    "r": "Iceland",
+    "la": 63.84,
+    "ln": -22.43,
+    "o": null
+  },
+  {
+    "n": "Tjornuvik",
+    "r": "Faroe Islands",
+    "la": 62.28,
+    "ln": -7.16,
+    "o": null
+  },
+  {
+    "n": "Unstad",
+    "r": "Norway",
+    "la": 68.19,
+    "ln": 13.55,
+    "o": null
+  },
+  {
+    "n": "Stadlandet",
+    "r": "Norway",
+    "la": 62.17,
+    "ln": 5.14,
+    "o": null
+  },
+  {
+    "n": "Seignosse",
+    "r": "France",
+    "la": 43.69,
+    "ln": -1.4,
+    "o": null
+  },
+  {
+    "n": "Capbreton",
+    "r": "France",
+    "la": 43.63,
+    "ln": -1.45,
+    "o": null
+  },
+  {
+    "n": "La Nord",
+    "r": "France",
+    "la": 43.65,
+    "ln": -1.45,
+    "o": null
+  },
+  {
+    "n": "La Piste",
+    "r": "France",
+    "la": 43.63,
+    "ln": -1.44,
+    "o": null
+  },
+  {
+    "n": "Mimizan",
+    "r": "France",
+    "la": 44.2,
+    "ln": -1.3,
+    "o": null
+  },
+  {
+    "n": "Soulac",
+    "r": "France",
+    "la": 45.5,
+    "ln": -1.13,
+    "o": null
+  },
+  {
+    "n": "Somo",
+    "r": "Spain",
+    "la": 43.45,
+    "ln": -3.74,
+    "o": null
+  },
+  {
+    "n": "Rodiles",
+    "r": "Spain",
+    "la": 43.53,
+    "ln": -5.39,
+    "o": null
+  },
+  {
+    "n": "Pantin",
+    "r": "Spain",
+    "la": 43.6,
+    "ln": -8.14,
+    "o": null
+  },
+  {
+    "n": "Razo",
+    "r": "Spain",
+    "la": 43.3,
+    "ln": -8.75,
+    "o": null
+  },
+  {
+    "n": "Praia do Norte",
+    "r": "Portugal",
+    "la": 39.6,
+    "ln": -9.08,
+    "o": null
+  },
+  {
+    "n": "Baleal",
+    "r": "Portugal",
+    "la": 39.37,
+    "ln": -9.34,
+    "o": null
+  },
+  {
+    "n": "Guincho",
+    "r": "Portugal",
+    "la": 38.73,
+    "ln": -9.47,
+    "o": null
+  },
+  {
+    "n": "Carcavelos",
+    "r": "Portugal",
+    "la": 38.69,
+    "ln": -9.34,
+    "o": null
+  },
+  {
+    "n": "Cascais",
+    "r": "Portugal",
+    "la": 38.69,
+    "ln": -9.42,
+    "o": null
+  },
+  {
+    "n": "Carrapateira",
+    "r": "Portugal",
+    "la": 37.18,
+    "ln": -8.9,
+    "o": null
+  },
+  {
+    "n": "Arrifana",
+    "r": "Portugal",
+    "la": 37.29,
+    "ln": -8.87,
+    "o": null
+  },
+  {
+    "n": "El Quemao",
+    "r": "Lanzarote, Spain",
+    "la": 29.12,
+    "ln": -13.66,
+    "o": null
+  },
+  {
+    "n": "La Santa",
+    "r": "Lanzarote, Spain",
+    "la": 29.12,
+    "ln": -13.67,
+    "o": null
+  },
+  {
+    "n": "El Confital",
+    "r": "Canaries, Spain",
+    "la": 28.15,
+    "ln": -15.43,
+    "o": null
+  },
+  {
+    "n": "Las Palmas",
+    "r": "Canaries, Spain",
+    "la": 28.13,
+    "ln": -15.43,
+    "o": null
+  },
+  {
+    "n": "La Izquierda",
+    "r": "Fuerteventura, Spain",
+    "la": 28.74,
+    "ln": -14,
+    "o": null
+  },
+  {
+    "n": "El Cotillo",
+    "r": "Fuerteventura, Spain",
+    "la": 28.68,
+    "ln": -14.01,
+    "o": null
+  },
+  {
+    "n": "Corralejo",
+    "r": "Fuerteventura, Spain",
+    "la": 28.73,
+    "ln": -13.86,
+    "o": null
+  },
+  {
+    "n": "Jardim do Mar",
+    "r": "Madeira, Portugal",
+    "la": 32.74,
+    "ln": -17.18,
+    "o": null
+  },
+  {
+    "n": "Paul do Mar",
+    "r": "Madeira, Portugal",
+    "la": 32.76,
+    "ln": -17.23,
+    "o": null
+  },
+  {
+    "n": "Ponta Pequena",
+    "r": "Madeira, Portugal",
+    "la": 32.73,
+    "ln": -17.05,
+    "o": null
+  },
+  {
+    "n": "Ribeira d'Ilhas Azores",
+    "r": "Azores, Portugal",
+    "la": 38.55,
+    "ln": -28.7,
+    "o": null
+  },
+  {
+    "n": "Santa Barbara",
+    "r": "Azores, Portugal",
+    "la": 37.8,
+    "ln": -25.73,
+    "o": null
+  },
+  {
+    "n": "Banzai Italy",
+    "r": "Italy",
+    "la": 43.72,
+    "ln": 10.39,
+    "o": null
+  },
+  {
+    "n": "Varazze",
+    "r": "Italy",
+    "la": 44.37,
+    "ln": 8.57,
+    "o": null
+  },
+  {
+    "n": "Levanto",
+    "r": "Italy",
+    "la": 44.17,
+    "ln": 9.61,
+    "o": null
+  },
+  {
+    "n": "Santa Severa",
+    "r": "Italy",
+    "la": 42.04,
+    "ln": 11.96,
+    "o": null
+  },
+  {
+    "n": "Scheveningen",
+    "r": "Netherlands",
+    "la": 52.1,
+    "ln": 4.26,
+    "o": null
+  },
+  {
+    "n": "Domburg",
+    "r": "Netherlands",
+    "la": 51.57,
+    "ln": 3.5,
+    "o": null
+  },
+  {
+    "n": "De Haan",
+    "r": "Belgium",
+    "la": 51.28,
+    "ln": 3.04,
+    "o": null
+  },
+  {
+    "n": "Robertson Bay",
+    "r": "South Africa",
+    "la": -34.16,
+    "ln": 19.42,
+    "o": null
+  },
+  {
+    "n": "Elands Bay",
+    "r": "South Africa",
+    "la": -32.31,
+    "ln": 18.33,
+    "o": null
+  },
+  {
+    "n": "Kommetjie",
+    "r": "South Africa",
+    "la": -34.14,
+    "ln": 18.33,
+    "o": null
+  },
+  {
+    "n": "Long Beach SA",
+    "r": "South Africa",
+    "la": -34.13,
+    "ln": 18.34,
+    "o": null
+  },
+  {
+    "n": "Llandudno",
+    "r": "South Africa",
+    "la": -34.01,
+    "ln": 18.34,
+    "o": null
+  },
+  {
+    "n": "Supertubes J-Bay",
+    "r": "South Africa",
+    "la": -34.05,
+    "ln": 24.91,
+    "o": null
+  },
+  {
+    "n": "Cape St Francis",
+    "r": "South Africa",
+    "la": -34.21,
+    "ln": 24.83,
+    "o": null
+  },
+  {
+    "n": "Still Bay",
+    "r": "South Africa",
+    "la": -34.37,
+    "ln": 21.4,
+    "o": null
+  },
+  {
+    "n": "Wilderness",
+    "r": "South Africa",
+    "la": -33.99,
+    "ln": 22.57,
+    "o": null
+  },
+  {
+    "n": "Victoria Bay",
+    "r": "South Africa",
+    "la": -33.99,
+    "ln": 22.54,
+    "o": null
+  },
+  {
+    "n": "Coffee Bay",
+    "r": "South Africa",
+    "la": -31.99,
+    "ln": 29.15,
+    "o": null
+  },
+  {
+    "n": "Ponta do Ouro",
+    "r": "Mozambique",
+    "la": -26.85,
+    "ln": 32.9,
+    "o": null
+  },
+  {
+    "n": "Tofo",
+    "r": "Mozambique",
+    "la": -23.85,
+    "ln": 35.55,
+    "o": null
+  },
+  {
+    "n": "Praia do Rochas Africa",
+    "r": "Mozambique",
+    "la": -23.8,
+    "ln": 35.53,
+    "o": null
+  },
+  {
+    "n": "Mdumbi",
+    "r": "South Africa",
+    "la": -31.95,
+    "ln": 29.2,
+    "o": null
+  },
+  {
+    "n": "Famara",
+    "r": "Canaries, Spain",
+    "la": 29.12,
+    "ln": -13.56,
+    "o": null
+  },
+  {
+    "n": "Luanda Beach",
+    "r": "Angola",
+    "la": -8.94,
+    "ln": 13.28,
+    "o": null
+  },
+  {
+    "n": "Cabo Ledo",
+    "r": "Angola",
+    "la": -9.74,
+    "ln": 13.22,
+    "o": null
+  },
+  {
+    "n": "Flamingos",
+    "r": "Angola",
+    "la": -15.21,
+    "ln": 12.15,
+    "o": null
+  },
+  {
+    "n": "Robertsport",
+    "r": "Liberia",
+    "la": 6.75,
+    "ln": -11.37,
+    "o": null
+  },
+  {
+    "n": "Cape Three Points",
+    "r": "Ghana",
+    "la": 4.75,
+    "ln": -2.08,
+    "o": null
+  },
+  {
+    "n": "Busua",
+    "r": "Ghana",
+    "la": 4.79,
+    "ln": -1.95,
+    "o": null
+  },
+  {
+    "n": "Ada",
+    "r": "Ghana",
+    "la": 5.78,
+    "ln": 0.63,
+    "o": null
+  },
+  {
+    "n": "Dakhla",
+    "r": "Morocco",
+    "la": 23.7,
+    "ln": -15.95,
+    "o": null
+  },
+  {
+    "n": "Tarfaya",
+    "r": "Morocco",
+    "la": 27.94,
+    "ln": -12.93,
+    "o": null
+  },
+  {
+    "n": "Mirleft",
+    "r": "Morocco",
+    "la": 29.58,
+    "ln": -10.05,
+    "o": null
+  },
+  {
+    "n": "Sidi Ifni",
+    "r": "Morocco",
+    "la": 29.38,
+    "ln": -10.18,
+    "o": null
+  },
+  {
+    "n": "Taghazout Bay",
+    "r": "Morocco",
+    "la": 30.54,
+    "ln": -9.71,
+    "o": null
+  },
+  {
+    "n": "Essaouira",
+    "r": "Morocco",
+    "la": 31.51,
+    "ln": -9.77,
+    "o": null
+  },
+  {
+    "n": "Oualidia",
+    "r": "Morocco",
+    "la": 32.73,
+    "ln": -9.03,
+    "o": null
+  },
+  {
+    "n": "Lalla Fatna",
+    "r": "Morocco",
+    "la": 32.42,
+    "ln": -9.28,
+    "o": null
+  },
+  {
+    "n": "Safi",
+    "r": "Morocco",
+    "la": 32.3,
+    "ln": -9.24,
+    "o": null
+  },
+  {
+    "n": "Peniche Berbere",
+    "r": "Morocco",
+    "la": 28.48,
+    "ln": -11.3,
+    "o": null
+  },
+  {
+    "n": "Anakao",
+    "r": "Madagascar",
+    "la": -23.65,
+    "ln": 43.64,
+    "o": null
+  },
+  {
+    "n": "Fort Dauphin",
+    "r": "Madagascar",
+    "la": -25.03,
+    "ln": 46.99,
+    "o": null
+  },
+  {
+    "n": "St Augustin",
+    "r": "Madagascar",
+    "la": -23.54,
+    "ln": 43.76,
+    "o": null
+  },
+  {
+    "n": "Tamatave",
+    "r": "Madagascar",
+    "la": -18.15,
+    "ln": 49.4,
+    "o": null
+  },
+  {
+    "n": "Mahe",
+    "r": "Seychelles",
+    "la": -4.68,
+    "ln": 55.49,
+    "o": null
+  },
+  {
+    "n": "Ahangama",
+    "r": "Sri Lanka",
+    "la": 5.98,
+    "ln": 80.36,
+    "o": null
+  },
+  {
+    "n": "Cloud 9",
+    "r": "Siargao, Philippines",
+    "la": 9.87,
+    "ln": 126.17,
+    "o": null
+  },
+  {
+    "n": "Quezon",
+    "r": "Philippines",
+    "la": 14.04,
+    "ln": 122.18,
+    "o": null
+  },
+  {
+    "n": "Baler",
+    "r": "Philippines",
+    "la": 15.77,
+    "ln": 121.57,
+    "o": null
+  },
+  {
+    "n": "Majestics",
+    "r": "Philippines",
+    "la": 14.74,
+    "ln": 121.61,
+    "o": null
+  },
+  {
+    "n": "Daet",
+    "r": "Philippines",
+    "la": 14.12,
+    "ln": 122.96,
+    "o": null
+  },
+  {
+    "n": "Jinshan",
+    "r": "Taiwan",
+    "la": 25.22,
+    "ln": 121.64,
+    "o": null
+  },
+  {
+    "n": "Jialeshui",
+    "r": "Taiwan",
+    "la": 22.07,
+    "ln": 120.84,
+    "o": null
+  },
+  {
+    "n": "Fulong",
+    "r": "Taiwan",
+    "la": 25.02,
+    "ln": 121.94,
+    "o": null
+  },
+  {
+    "n": "Wushi",
+    "r": "Taiwan",
+    "la": 24.87,
+    "ln": 121.82,
+    "o": null
+  },
+  {
+    "n": "Yangyang",
+    "r": "South Korea",
+    "la": 38.08,
+    "ln": 128.63,
+    "o": null
+  },
+  {
+    "n": "Chusi",
+    "r": "South Korea",
+    "la": 38.08,
+    "ln": 128.62,
+    "o": null
+  },
+  {
+    "n": "Jeju",
+    "r": "South Korea",
+    "la": 33.25,
+    "ln": 126.41,
+    "o": null
+  },
+  {
+    "n": "My Khe",
+    "r": "Vietnam",
+    "la": 16.06,
+    "ln": 108.25,
+    "o": null
+  },
+  {
+    "n": "Ninh Chu",
+    "r": "Vietnam",
+    "la": 11.59,
+    "ln": 109.02,
+    "o": null
+  },
+  {
+    "n": "Mui Ne",
+    "r": "Vietnam",
+    "la": 10.94,
+    "ln": 108.28,
+    "o": null
+  },
+  {
+    "n": "Da Nang",
+    "r": "Vietnam",
+    "la": 16.06,
+    "ln": 108.24,
+    "o": null
+  },
+  {
+    "n": "Chiba",
+    "r": "Japan",
+    "la": 35.6,
+    "ln": 140.42,
+    "o": null
+  },
+  {
+    "n": "Isumi",
+    "r": "Japan",
+    "la": 35.25,
+    "ln": 140.4,
+    "o": null
+  },
+  {
+    "n": "Enoshima",
+    "r": "Japan",
+    "la": 35.3,
+    "ln": 139.47,
+    "o": null
+  },
+  {
+    "n": "Tsujido",
+    "r": "Japan",
+    "la": 35.32,
+    "ln": 139.44,
+    "o": null
+  },
+  {
+    "n": "Kugenuma",
+    "r": "Japan",
+    "la": 35.32,
+    "ln": 139.45,
+    "o": null
+  },
+  {
+    "n": "Onjuku",
+    "r": "Japan",
+    "la": 35.18,
+    "ln": 140.36,
+    "o": null
+  },
+  {
+    "n": "Bingin",
+    "r": "Bali, Indonesia",
+    "la": -8.79,
+    "ln": 115.11,
+    "o": null
+  },
+  {
+    "n": "Impossibles",
+    "r": "Bali, Indonesia",
+    "la": -8.79,
+    "ln": 115.12,
+    "o": null
+  },
+  {
+    "n": "Dreamland",
+    "r": "Bali, Indonesia",
+    "la": -8.8,
+    "ln": 115.11,
+    "o": null
+  },
+  {
+    "n": "Balangan",
+    "r": "Bali, Indonesia",
+    "la": -8.8,
+    "ln": 115.11,
+    "o": null
+  },
+  {
+    "n": "Green Bowl",
+    "r": "Bali, Indonesia",
+    "la": -8.84,
+    "ln": 115.17,
+    "o": null
+  },
+  {
+    "n": "Medewi",
+    "r": "Bali, Indonesia",
+    "la": -8.42,
+    "ln": 114.8,
+    "o": null
+  },
+  {
+    "n": "Nusa Lembongan",
+    "r": "Bali, Indonesia",
+    "la": -8.69,
+    "ln": 115.44,
+    "o": null
+  },
+  {
+    "n": "Playgrounds",
+    "r": "Mentawai, Indonesia",
+    "la": -1.1,
+    "ln": 98.63,
+    "o": null
+  },
+  {
+    "n": "Macaronis",
+    "r": "Mentawai, Indonesia",
+    "la": -2.93,
+    "ln": 100.05,
+    "o": null
+  },
+  {
+    "n": "Lance's Right",
+    "r": "Mentawai, Indonesia",
+    "la": -2.71,
+    "ln": 100.06,
+    "o": null
+  },
+  {
+    "n": "Rifles",
+    "r": "Mentawai, Indonesia",
+    "la": -2.72,
+    "ln": 100.07,
+    "o": null
+  },
+  {
+    "n": "HT's",
+    "r": "Mentawai, Indonesia",
+    "la": -2.65,
+    "ln": 100.11,
+    "o": null
+  },
+  {
+    "n": "Thunders",
+    "r": "Mentawai, Indonesia",
+    "la": -2.34,
+    "ln": 99.97,
+    "o": null
+  },
+  {
+    "n": "E-Bay",
+    "r": "Mentawai, Indonesia",
+    "la": -1.44,
+    "ln": 98.92,
+    "o": null
+  },
+  {
+    "n": "Pitstops",
+    "r": "Mentawai, Indonesia",
+    "la": -1.43,
+    "ln": 98.94,
+    "o": null
+  },
+  {
+    "n": "Scarecrows",
+    "r": "Mentawai, Indonesia",
+    "la": -1.25,
+    "ln": 99,
+    "o": null
+  },
+  {
+    "n": "Lagundri Bay",
+    "r": "Nias, Indonesia",
+    "la": 0.59,
+    "ln": 97.75,
+    "o": null
+  },
+  {
+    "n": "Sorake",
+    "r": "Nias, Indonesia",
+    "la": 0.59,
+    "ln": 97.75,
+    "o": null
+  },
+  {
+    "n": "Lampung",
+    "r": "Sumatra, Indonesia",
+    "la": -5.93,
+    "ln": 104.52,
+    "o": null
+  },
+  {
+    "n": "Ujung Bocur",
+    "r": "Sumatra, Indonesia",
+    "la": -5.29,
+    "ln": 104.32,
+    "o": null
+  },
+  {
+    "n": "Way Jambu",
+    "r": "Sumatra, Indonesia",
+    "la": -5.83,
+    "ln": 104.51,
+    "o": null
+  },
+  {
+    "n": "Pulau Merah",
+    "r": "Java, Indonesia",
+    "la": -8.6,
+    "ln": 114.04,
+    "o": null
+  },
+  {
+    "n": "Plengkung",
+    "r": "Java, Indonesia",
+    "la": -8.73,
+    "ln": 114.34,
+    "o": null
+  },
+  {
+    "n": "Red Island",
+    "r": "Java, Indonesia",
+    "la": -8.56,
+    "ln": 114.03,
+    "o": null
+  },
+  {
+    "n": "Lakey Peak",
+    "r": "Sumbawa, Indonesia",
+    "la": -8.86,
+    "ln": 118.73,
+    "o": null
+  },
+  {
+    "n": "Lakey Pipe",
+    "r": "Sumbawa, Indonesia",
+    "la": -8.85,
+    "ln": 118.73,
+    "o": null
+  },
+  {
+    "n": "Scar Reef",
+    "r": "Sumbawa, Indonesia",
+    "la": -8.85,
+    "ln": 117.13,
+    "o": null
+  },
+  {
+    "n": "Super Suck",
+    "r": "Sumbawa, Indonesia",
+    "la": -8.74,
+    "ln": 116.98,
+    "o": null
+  },
+  {
+    "n": "Periscopes",
+    "r": "Sumbawa, Indonesia",
+    "la": -8.85,
+    "ln": 117.16,
+    "o": null
+  },
+  {
+    "n": "Mawi",
+    "r": "Lombok, Indonesia",
+    "la": -8.89,
+    "ln": 116.1,
+    "o": null
+  },
+  {
+    "n": "Nemberala",
+    "r": "Rote, Indonesia",
+    "la": -10.9,
+    "ln": 122.96,
+    "o": null
+  },
+  {
+    "n": "T-land",
+    "r": "Rote, Indonesia",
+    "la": -10.91,
+    "ln": 122.96,
+    "o": null
+  },
+  {
+    "n": "Boa",
+    "r": "Rote, Indonesia",
+    "la": -10.95,
+    "ln": 122.99,
+    "o": null
+  },
+  {
+    "n": "Occy's Left",
+    "r": "Sumba, Indonesia",
+    "la": -9.68,
+    "ln": 120.12,
+    "o": null
+  },
+  {
+    "n": "Miller's Right",
+    "r": "Sumba, Indonesia",
+    "la": -9.72,
+    "ln": 120.22,
+    "o": null
+  },
+  {
+    "n": "Chickens",
+    "r": "Maldives",
+    "la": 4.42,
+    "ln": 73.52,
+    "o": null
+  },
+  {
+    "n": "Cokes",
+    "r": "Maldives",
+    "la": 4.42,
+    "ln": 73.52,
+    "o": null
+  },
+  {
+    "n": "Sultans",
+    "r": "Maldives",
+    "la": 4.41,
+    "ln": 73.58,
+    "o": null
+  },
+  {
+    "n": "Honkys",
+    "r": "Maldives",
+    "la": 4.38,
+    "ln": 73.55,
+    "o": null
+  },
+  {
+    "n": "Pasta Point",
+    "r": "Maldives",
+    "la": 4.16,
+    "ln": 73.2,
+    "o": null
+  },
+  {
+    "n": "Lohis",
+    "r": "Maldives",
+    "la": 4.1,
+    "ln": 73.28,
+    "o": null
+  },
+  {
+    "n": "Quarters",
+    "r": "Maldives",
+    "la": 4.34,
+    "ln": 73.72,
+    "o": null
+  },
+  {
+    "n": "Riptides",
+    "r": "Maldives",
+    "la": 2.83,
+    "ln": 73.09,
+    "o": null
+  },
+  {
+    "n": "Beacons",
+    "r": "Maldives",
+    "la": 2.68,
+    "ln": 73.05,
+    "o": null
+  },
+  {
+    "n": "Kandooma",
+    "r": "Maldives",
+    "la": 3.51,
+    "ln": 73.48,
+    "o": null
+  },
+  {
+    "n": "Weligama",
+    "r": "Sri Lanka",
+    "la": 5.97,
+    "ln": 80.43,
+    "o": null
+  },
+  {
+    "n": "Midigama",
+    "r": "Sri Lanka",
+    "la": 5.97,
+    "ln": 80.39,
+    "o": null
+  },
+  {
+    "n": "Unawatuna",
+    "r": "Sri Lanka",
+    "la": 6.01,
+    "ln": 80.25,
+    "o": null
+  },
+  {
+    "n": "Kabalana",
+    "r": "Sri Lanka",
+    "la": 5.98,
+    "ln": 80.37,
+    "o": null
+  },
+  {
+    "n": "Peanut Farm",
+    "r": "Sri Lanka",
+    "la": 6.84,
+    "ln": 81.83,
+    "o": null
+  },
+  {
+    "n": "Khalaktyrsky",
+    "r": "Russia (Kamchatka)",
+    "la": 53.02,
+    "ln": 158.73,
+    "o": null
+  },
+  {
+    "n": "Polar Bear Beach",
+    "r": "Russia (Kamchatka)",
+    "la": 53.03,
+    "ln": 158.75,
+    "o": null
+  },
+  {
+    "n": "Boulders",
+    "r": "Samoa",
+    "la": -13.77,
+    "ln": -172.25,
+    "o": null
+  },
+  {
+    "n": "Aganoa",
+    "r": "Samoa",
+    "la": -13.95,
+    "ln": -171.44,
+    "o": null
+  },
+  {
+    "n": "Sa'anapu",
+    "r": "Samoa",
+    "la": -14,
+    "ln": -171.94,
+    "o": null
+  },
+  {
+    "n": "Ha'atafu",
+    "r": "Tonga",
+    "la": -21.06,
+    "ln": -175.37,
+    "o": null
+  },
+  {
+    "n": "Lighthouse Tonga",
+    "r": "Tonga",
+    "la": -21.05,
+    "ln": -175.37,
+    "o": null
+  },
+  {
+    "n": "Pango Point",
+    "r": "Vanuatu",
+    "la": -17.79,
+    "ln": 168.28,
+    "o": null
+  },
+  {
+    "n": "Nanouk",
+    "r": "Vanuatu",
+    "la": -17.12,
+    "ln": 168.43,
+    "o": null
+  },
+  {
+    "n": "Ouano",
+    "r": "New Caledonia",
+    "la": -21.82,
+    "ln": 165.87,
+    "o": null
+  },
+  {
+    "n": "Turoa",
+    "r": "Cook Islands",
+    "la": -21.22,
+    "ln": -159.83,
+    "o": null
+  },
+  {
+    "n": "Avana",
+    "r": "Cook Islands",
+    "la": -21.23,
+    "ln": -159.72,
+    "o": null
+  },
+  {
+    "n": "Pailolo",
+    "r": "Solomon Islands",
+    "la": -8.37,
+    "ln": 157.24,
+    "o": null
+  },
+  {
+    "n": "Kavieng",
+    "r": "PNG",
+    "la": -2.58,
+    "ln": 150.8,
+    "o": null
+  },
+  {
+    "n": "Vanimo",
+    "r": "PNG",
+    "la": -2.68,
+    "ln": 141.3,
+    "o": null
+  },
+  {
+    "n": "Sapinus",
+    "r": "Tahiti",
+    "la": -17.63,
+    "ln": -149.46,
+    "o": null
+  },
+  {
+    "n": "Taapuna",
+    "r": "Tahiti",
+    "la": -17.57,
+    "ln": -149.62,
+    "o": null
+  },
+  {
+    "n": "Haapiti",
+    "r": "Moorea",
+    "la": -17.57,
+    "ln": -149.88,
+    "o": null
+  },
+  {
+    "n": "Temae",
+    "r": "Moorea",
+    "la": -17.49,
+    "ln": -149.76,
+    "o": null
+  },
+  {
+    "n": "Tuamotu Rangiroa",
+    "r": "French Polynesia",
+    "la": -14.97,
+    "ln": -147.63,
+    "o": null
+  },
+  {
+    "n": "Guam South",
+    "r": "Guam",
+    "la": 13.29,
+    "ln": 144.67,
+    "o": null
+  },
+  {
+    "n": "Paliaun",
+    "r": "Palau",
+    "la": 7.5,
+    "ln": 134.58,
+    "o": null
+  },
+  {
+    "n": "Backdoor",
+    "r": "Oahu",
+    "la": 21.67,
+    "ln": -158.06,
+    "o": null
+  },
+  {
+    "n": "Pupukea",
+    "r": "Oahu",
+    "la": 21.66,
+    "ln": -158.03,
+    "o": null
+  },
+  {
+    "n": "Velzyland",
+    "r": "Oahu",
+    "la": 21.7,
+    "ln": -158.01,
+    "o": null
+  },
+  {
+    "n": "Ehukai",
+    "r": "Oahu",
+    "la": 21.66,
+    "ln": -158.05,
+    "o": null
+  },
+  {
+    "n": "Chun's Reef",
+    "r": "Oahu",
+    "la": 21.62,
+    "ln": -158.1,
+    "o": null
+  },
+  {
+    "n": "Laniakea",
+    "r": "Oahu",
+    "la": 21.61,
+    "ln": -158.1,
+    "o": null
+  },
+  {
+    "n": "Makaha",
+    "r": "Oahu",
+    "la": 21.48,
+    "ln": -158.22,
+    "o": null
+  },
+  {
+    "n": "Tracks Oahu",
+    "r": "Oahu",
+    "la": 21.31,
+    "ln": -158.12,
+    "o": null
+  },
+  {
+    "n": "Diamond Head",
+    "r": "Oahu",
+    "la": 21.26,
+    "ln": -157.8,
+    "o": null
+  },
+  {
+    "n": "Point Panic",
+    "r": "Oahu",
+    "la": 21.28,
+    "ln": -157.87,
+    "o": null
+  },
+  {
+    "n": "Kewalos",
+    "r": "Oahu",
+    "la": 21.28,
+    "ln": -157.86,
+    "o": null
+  },
+  {
+    "n": "Pine Trees",
+    "r": "Kauai",
+    "la": 22.2,
+    "ln": -159.46,
+    "o": null
+  },
+  {
+    "n": "Ha'ena",
+    "r": "Kauai",
+    "la": 22.22,
+    "ln": -159.58,
+    "o": null
+  },
+  {
+    "n": "Kealia",
+    "r": "Kauai",
+    "la": 22.1,
+    "ln": -159.3,
+    "o": null
+  },
+  {
+    "n": "Honoli'i",
+    "r": "Big Island, HI",
+    "la": 19.75,
+    "ln": -155.1,
+    "o": null
+  },
+  {
+    "n": "Banyans",
+    "r": "Big Island, HI",
+    "la": 19.65,
+    "ln": -155.99,
+    "o": null
+  },
+  {
+    "n": "Kahului",
+    "r": "Maui",
+    "la": 20.89,
+    "ln": -156.46,
+    "o": null
+  },
+  {
+    "n": "Yallingup",
+    "r": "Western AU",
+    "la": -33.64,
+    "ln": 115.03,
+    "o": null
+  },
+  {
+    "n": "Prevelly",
+    "r": "Western AU",
+    "la": -33.96,
+    "ln": 114.98,
+    "o": null
+  },
+  {
+    "n": "Gnaraloo",
+    "r": "Western AU",
+    "la": -23.84,
+    "ln": 113.53,
+    "o": null
+  },
+  {
+    "n": "Red Bluff",
+    "r": "Western AU",
+    "la": -24.05,
+    "ln": 113.4,
+    "o": null
+  },
+  {
+    "n": "Kalbarri",
+    "r": "Western AU",
+    "la": -27.71,
+    "ln": 114.17,
+    "o": null
+  },
+  {
+    "n": "Trigg",
+    "r": "Western AU",
+    "la": -31.87,
+    "ln": 115.76,
+    "o": null
+  },
+  {
+    "n": "Scarborough",
+    "r": "Western AU",
+    "la": -31.89,
+    "ln": 115.76,
+    "o": null
+  },
+  {
+    "n": "Cottesloe",
+    "r": "Western AU",
+    "la": -31.99,
+    "ln": 115.75,
+    "o": null
+  },
+  {
+    "n": "North Point",
+    "r": "Western AU",
+    "la": -33.65,
+    "ln": 115.04,
+    "o": null
+  },
+  {
+    "n": "Elliston",
+    "r": "South AU",
+    "la": -33.64,
+    "ln": 134.89,
+    "o": null
+  },
+  {
+    "n": "Streaky Bay",
+    "r": "South AU",
+    "la": -32.8,
+    "ln": 134.21,
+    "o": null
+  },
+  {
+    "n": "Thirteenth Beach",
+    "r": "Victoria, AU",
+    "la": -38.27,
+    "ln": 144.49,
+    "o": null
+  },
+  {
+    "n": "Johanna",
+    "r": "Victoria, AU",
+    "la": -38.75,
+    "ln": 143.37,
+    "o": null
+  },
+  {
+    "n": "Avoca",
+    "r": "NSW, AU",
+    "la": -33.47,
+    "ln": 151.44,
+    "o": null
+  },
+  {
+    "n": "Terrigal",
+    "r": "NSW, AU",
+    "la": -33.44,
+    "ln": 151.45,
+    "o": null
+  },
+  {
+    "n": "Byron Bay",
+    "r": "NSW, AU",
+    "la": -28.64,
+    "ln": 153.61,
+    "o": null
+  },
+  {
+    "n": "Lennox Head",
+    "r": "NSW, AU",
+    "la": -28.8,
+    "ln": 153.6,
+    "o": null
+  },
+  {
+    "n": "Angourie",
+    "r": "NSW, AU",
+    "la": -29.48,
+    "ln": 153.36,
+    "o": null
+  },
+  {
+    "n": "Yamba",
+    "r": "NSW, AU",
+    "la": -29.44,
+    "ln": 153.36,
+    "o": null
+  },
+  {
+    "n": "Coffs Harbour",
+    "r": "NSW, AU",
+    "la": -30.3,
+    "ln": 153.12,
+    "o": null
+  },
+  {
+    "n": "South Golden",
+    "r": "NSW, AU",
+    "la": -28.55,
+    "ln": 153.55,
+    "o": null
+  },
+  {
+    "n": "Wategos",
+    "r": "NSW, AU",
+    "la": -28.63,
+    "ln": 153.63,
+    "o": null
+  },
+  {
+    "n": "The Pass",
+    "r": "NSW, AU",
+    "la": -28.63,
+    "ln": 153.63,
+    "o": null
+  },
+  {
+    "n": "Tallows",
+    "r": "NSW, AU",
+    "la": -28.65,
+    "ln": 153.62,
+    "o": null
+  },
+  {
+    "n": "Kingscliff",
+    "r": "NSW, AU",
+    "la": -28.25,
+    "ln": 153.58,
+    "o": null
+  },
+  {
+    "n": "Greenmount",
+    "r": "Gold Coast, AU",
+    "la": -28.17,
+    "ln": 153.54,
+    "o": null
+  },
+  {
+    "n": "D-Bah",
+    "r": "Gold Coast, AU",
+    "la": -28.17,
+    "ln": 153.56,
+    "o": null
+  },
+  {
+    "n": "Currumbin",
+    "r": "Gold Coast, AU",
+    "la": -28.13,
+    "ln": 153.48,
+    "o": null
+  },
+  {
+    "n": "Alexandra Headland",
+    "r": "Queensland, AU",
+    "la": -26.68,
+    "ln": 153.1,
+    "o": null
+  },
+  {
+    "n": "Noosa Main",
+    "r": "Queensland, AU",
+    "la": -26.38,
+    "ln": 153.1,
+    "o": null
+  },
+  {
+    "n": "Sunshine Beach",
+    "r": "Queensland, AU",
+    "la": -26.41,
+    "ln": 153.1,
+    "o": null
+  },
+  {
+    "n": "Tea Tree",
+    "r": "Queensland, AU",
+    "la": -26.38,
+    "ln": 153.1,
+    "o": null
+  },
+  {
+    "n": "Shipstern Bluff",
+    "r": "Tasmania, AU",
+    "la": -43.22,
+    "ln": 147.85,
+    "o": null
+  },
+  {
+    "n": "Pedra Branca",
+    "r": "Tasmania, AU",
+    "la": -43.86,
+    "ln": 146.97,
+    "o": null
+  },
+  {
+    "n": "Ngarunui",
+    "r": "New Zealand",
+    "la": -37.81,
+    "ln": 174.82,
+    "o": null
+  },
+  {
+    "n": "Manu Bay",
+    "r": "New Zealand",
+    "la": -37.8,
+    "ln": 174.84,
+    "o": null
+  },
+  {
+    "n": "Whale Bay",
+    "r": "New Zealand",
+    "la": -37.79,
+    "ln": 174.83,
+    "o": null
+  },
+  {
+    "n": "Shipwreck Bay",
+    "r": "New Zealand",
+    "la": -35.17,
+    "ln": 173.16,
+    "o": null
+  },
+  {
+    "n": "Taylors Mistake",
+    "r": "New Zealand",
+    "la": -43.57,
+    "ln": 172.8,
+    "o": null
+  },
+  {
+    "n": "Sumner",
+    "r": "New Zealand",
+    "la": -43.57,
+    "ln": 172.75,
+    "o": null
+  },
+  {
+    "n": "Kaikoura",
+    "r": "New Zealand",
+    "la": -42.4,
+    "ln": 173.68,
+    "o": null
+  },
+  {
+    "n": "Gisborne",
+    "r": "New Zealand",
+    "la": -38.66,
+    "ln": 178.02,
+    "o": null
+  },
+  {
+    "n": "Makorori",
+    "r": "New Zealand",
+    "la": -38.64,
+    "ln": 178.07,
+    "o": null
+  },
+  {
+    "n": "Wainui",
+    "r": "New Zealand",
+    "la": -38.67,
+    "ln": 178.11,
+    "o": null
+  }
+]
