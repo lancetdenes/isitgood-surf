@@ -31,27 +31,64 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.dirname(SCRIPT_DIR)
 
 
+def _derive_scale(arr):
+    """Pick an int16 scale that preserves the array's range with headroom.
+
+    Returns (scale, offset) such that int16 = round((value - offset) / scale),
+    value = int16 * scale + offset. offset is always 0 here — centering on
+    zero keeps the decode symmetric and matches how the client parses.
+    """
+    max_abs = float(np.max(np.abs(arr))) if arr.size else 0.0
+    if max_abs == 0:
+        return (1.0, 0.0)
+    # 32000 leaves 2% headroom under int16's 32767 ceiling so downstream
+    # numerical drift (e.g. bilinear interpolation) can't clip.
+    return (max_abs / 32000.0, 0.0)
+
+
 def write_binary(filepath, nx, ny, lo1, la1, dx, dy, *arrays):
-    """Write arrays in CrowdSurf binary format."""
+    """Write arrays in SRF2 int16-quantized format.
+
+    Layout:
+      Header (32 bytes): magic "SRF2", nx, ny, lo1, la1, dx, dy, nParams
+      Scale table (nParams × 8 bytes): scale (f32), offset (f32)
+      Data: nParams arrays of int16 (nx*ny each)
+
+    Decoder: value = int16 * scale + offset.
+    """
     n_params = len(arrays)
     grid_size = nx * ny
 
+    # Derive per-param scales from observed ranges, then quantize.
+    scales = []
+    packed_arrays = []
+    for arr in arrays:
+        flat = np.asarray(arr).flatten().astype(np.float32)
+        assert len(flat) == grid_size, f"Array size {len(flat)} != grid size {grid_size}"
+        scale, offset = _derive_scale(flat)
+        # round() → nearest, clip to int16 range as a safety net.
+        quantized = np.clip(np.round((flat - offset) / scale), -32768, 32767).astype(np.int16)
+        scales.append((scale, offset))
+        packed_arrays.append(quantized)
+
     with open(filepath, 'wb') as f:
         # Header: 32 bytes
-        f.write(b'SURF')                                # magic
-        f.write(struct.pack('<I', nx))                   # nx
-        f.write(struct.pack('<I', ny))                   # ny
-        f.write(struct.pack('<f', lo1))                  # first lon
-        f.write(struct.pack('<f', la1))                  # first lat
-        f.write(struct.pack('<f', dx))                   # lon step
-        f.write(struct.pack('<f', dy))                   # lat step
-        f.write(struct.pack('<I', n_params))             # num params
+        f.write(b'SRF2')
+        f.write(struct.pack('<I', nx))
+        f.write(struct.pack('<I', ny))
+        f.write(struct.pack('<f', lo1))
+        f.write(struct.pack('<f', la1))
+        f.write(struct.pack('<f', dx))
+        f.write(struct.pack('<f', dy))
+        f.write(struct.pack('<I', n_params))
 
-        # Data arrays
-        for arr in arrays:
-            flat = arr.flatten().astype(np.float32)
-            assert len(flat) == grid_size, f"Array size {len(flat)} != grid size {grid_size}"
-            f.write(flat.tobytes())
+        # Scale table
+        for scale, offset in scales:
+            f.write(struct.pack('<ff', scale, offset))
+
+        # Data arrays (int16)
+        for q in packed_arrays:
+            f.write(q.tobytes())
 
     size_kb = os.path.getsize(filepath) / 1024
     print(f"    Wrote {filepath} ({size_kb:.0f} KB)")
@@ -227,6 +264,156 @@ def process_ecmwf_wind(grib_path, out_path):
     return True
 
 
+def _read_srf2(path):
+    """Read an SRF2 .bin file and return a dict with decoded float32 arrays.
+
+    Used by build_cube to re-read the per-hour grids it just wrote. Keeps
+    the cube builder decoupled from in-memory state of the main pipeline.
+    """
+    with open(path, 'rb') as f:
+        header = f.read(32)
+        magic = header[0:4]
+        if magic != b'SRF2':
+            raise ValueError(f"{path}: not an SRF2 file (magic={magic!r})")
+        nx = struct.unpack('<I', header[4:8])[0]
+        ny = struct.unpack('<I', header[8:12])[0]
+        lo1 = struct.unpack('<f', header[12:16])[0]
+        la1 = struct.unpack('<f', header[16:20])[0]
+        dx = struct.unpack('<f', header[20:24])[0]
+        dy = struct.unpack('<f', header[24:28])[0]
+        n_params = struct.unpack('<I', header[28:32])[0]
+
+        scales = []
+        for _ in range(n_params):
+            scales.append(struct.unpack('<ff', f.read(8)))
+
+        grid_size = nx * ny
+        arrays = []
+        for p in range(n_params):
+            raw = np.frombuffer(f.read(grid_size * 2), dtype=np.int16)
+            scale, offset = scales[p]
+            arrays.append(raw.astype(np.float32) * scale + offset)
+
+    return {
+        'nx': nx, 'ny': ny, 'lo1': lo1, 'la1': la1, 'dx': dx, 'dy': dy,
+        'arrays': arrays,
+    }
+
+
+def build_cube(run_dir, cube_path, hours):
+    """Assemble a cell-major point-forecast cube from per-hour SRF2 grids.
+
+    Layout (SCUB format):
+      Fixed header (64 B): magic "SCUB", nx, ny, lo1, la1, dx, dy, nHours,
+                           nParams=5, version=1, reserved
+      Hour table     : nHours × uint32 LE (forecast hour)
+      Scale table    : nParams × (scale float32, offset float32)
+      Cell data      : for each cell (j*nx+i), nHours × nParams int16
+
+    5 params in order: wind_u, wind_v, swell_height, swell_direction, swell_period.
+    Scales are global across all hours so a single decode rule works per param.
+
+    Skips hours missing either wind or swell. Writes nothing if fewer than
+    half the requested hours are usable — a cube built on partial data
+    produces misleading forecasts.
+    """
+    usable_hours = []
+    wind_arrays_by_hour = []  # each: list[Float32Array] of length 2
+    swell_arrays_by_hour = []  # each: list[Float32Array] of length 3
+    header_info = None
+
+    for h in hours:
+        fhrp = f"{h:03d}"
+        w_path = os.path.join(run_dir, f"wind_f{fhrp}.bin")
+        s_path = os.path.join(run_dir, f"swell_f{fhrp}.bin")
+        if not (os.path.exists(w_path) and os.path.exists(s_path)):
+            continue
+        try:
+            w = _read_srf2(w_path)
+            s = _read_srf2(s_path)
+        except Exception as e:
+            print(f"    Warning: cube build skipping f{fhrp}: {e}")
+            continue
+
+        if header_info is None:
+            header_info = {k: w[k] for k in ('nx', 'ny', 'lo1', 'la1', 'dx', 'dy')}
+        elif (w['nx'], w['ny']) != (header_info['nx'], header_info['ny']):
+            print(f"    Warning: f{fhrp} grid dims mismatch; skipping")
+            continue
+
+        usable_hours.append(h)
+        wind_arrays_by_hour.append(w['arrays'])
+        swell_arrays_by_hour.append(s['arrays'])
+
+    if header_info is None or len(usable_hours) < len(hours) / 2:
+        print(f"    Cube: only {len(usable_hours)}/{len(hours)} hours usable; skipping cube.")
+        return False
+
+    nx = header_info['nx']
+    ny = header_info['ny']
+    grid_size = nx * ny
+    n_hours = len(usable_hours)
+    n_params = 5  # wind_u, wind_v, swell_h, swell_dir, swell_period
+
+    # Per-param global scales: scan all hours to find the max magnitude.
+    # Using global scales keeps the decode rule uniform and the header tiny.
+    def max_abs(arrs):
+        return max(float(np.max(np.abs(a))) if a.size else 0.0 for a in arrs)
+
+    param_streams = [
+        [w[0] for w in wind_arrays_by_hour],   # u10
+        [w[1] for w in wind_arrays_by_hour],   # v10
+        [s[0] for s in swell_arrays_by_hour],  # height
+        [s[1] for s in swell_arrays_by_hour],  # direction
+        [s[2] for s in swell_arrays_by_hour],  # period
+    ]
+    scales = []
+    for stream in param_streams:
+        m = max_abs(stream)
+        scales.append((m / 32000.0 if m > 0 else 1.0, 0.0))
+
+    # Assemble the cube. Shape (grid_size, n_hours, n_params) means bytes are
+    # laid out cell-major — perfect for range-request reads on a single cell.
+    # int16 dtype keeps memory at ~600 MB for a full GFS run.
+    cube = np.empty((grid_size, n_hours, n_params), dtype=np.int16)
+    for p_idx, stream in enumerate(param_streams):
+        scale, offset = scales[p_idx]
+        for h_idx, arr in enumerate(stream):
+            flat = arr.flatten()
+            q = np.clip(np.round((flat - offset) / scale), -32768, 32767).astype(np.int16)
+            cube[:, h_idx, p_idx] = q
+
+    # Write the file. Fixed 64-byte header so offsets don't drift if fields
+    # are added later (use a reserved tail instead).
+    with open(cube_path, 'wb') as f:
+        f.write(b'SCUB')
+        f.write(struct.pack('<I', nx))
+        f.write(struct.pack('<I', ny))
+        f.write(struct.pack('<f', header_info['lo1']))
+        f.write(struct.pack('<f', header_info['la1']))
+        f.write(struct.pack('<f', header_info['dx']))
+        f.write(struct.pack('<f', header_info['dy']))
+        f.write(struct.pack('<I', n_hours))
+        f.write(struct.pack('<I', n_params))
+        f.write(struct.pack('<I', 1))  # version
+        f.write(b'\x00' * 24)  # reserved (pads to 64 B)
+
+        # Hour table
+        for h in usable_hours:
+            f.write(struct.pack('<I', h))
+
+        # Scale table
+        for scale, offset in scales:
+            f.write(struct.pack('<ff', scale, offset))
+
+        # Cell data (cell-major, already in correct order)
+        f.write(cube.tobytes())
+
+    size_mb = os.path.getsize(cube_path) / (1024 * 1024)
+    print(f"    Wrote {cube_path} ({size_mb:.1f} MB, {n_hours} hours × {n_params} params × {grid_size} cells)")
+    return True
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python3 process-grib.py <model> [run_id]")
@@ -290,6 +477,14 @@ def main():
                 process_gfs_wave(wave_grib, os.path.join(out_dir, f"swell_f{fhrp}.bin"))
             else:
                 print(f"    Skipping swell (no GRIB file)")
+
+    # Build point-forecast cube from the per-hour grids we just wrote.
+    # Client panel clicks range-request this file instead of fetching all 57
+    # grids — two ~1 KB reads vs. the old ~1 GB.
+    print()
+    print(f"━━━ Building point cube ━━━")
+    cube_hours = list(range(0, 169, 3))  # 57 hours — matches panel's range
+    build_cube(out_dir, os.path.join(out_dir, 'points.bin'), cube_hours)
 
     print()
     print(f"━━━ Done! Processed data in: {out_dir} ━━━")

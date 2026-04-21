@@ -50,8 +50,14 @@ jobs:
           FILE_COUNT=$(ls data/gfs/$RUN_ID/*.bin | wc -l)
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "Run: $RUN_ID ($FILE_COUNT .bin files)"
+          # Threshold covers: wind_*.bin + swell_*.bin across all hours + points.bin.
+          # Drops below ~100 when GRIB downloads were incomplete.
           if [ "$FILE_COUNT" -lt 100 ]; then
             echo "::error::Only $FILE_COUNT files processed; aborting."
+            exit 1
+          fi
+          if [ ! -f "data/gfs/$RUN_ID/points.bin" ]; then
+            echo "::error::points.bin (cube) missing; panel reads depend on it."
             exit 1
           fi
 
@@ -102,7 +108,28 @@ jobs:
           echo "::warning::Fly did not roll over to $RUN_ID in time"
 
       # ─── Cloudflare R2 delivery (active once R2_* secrets exist) ────────
-      - name: Upload to Cloudflare R2
+      # Step order matters: the tarball uploaded to Fly above contains the raw
+      # per-hour grids. We gzip *after* that so Fly receives bytes its Express
+      # server can serve directly (it uses compression() to gzip on the fly).
+      - name: Gzip per-hour grids for R2
+        if: ${{ env.R2_ACCOUNT_ID != '' }}
+        env:
+          RUN_ID: ${{ steps.run.outputs.run_id }}
+        run: |
+          # Replace each wind_*.bin and swell_*.bin with its gzip-compressed
+          # payload. R2 serves these with `Content-Encoding: gzip` so browsers
+          # decode transparently and the on-the-wire size drops ~3×.
+          # points.bin is excluded: range requests need the stored bytes to
+          # match the offsets the client computed, which gzip at rest breaks.
+          cd "data/gfs/${RUN_ID}"
+          for f in wind_*.bin swell_*.bin; do
+            [ -f "$f" ] || continue
+            gzip -9 -c "$f" > "${f}.tmp.gz"
+            mv "${f}.tmp.gz" "$f"
+          done
+          echo "Gzipped $(ls wind_*.bin swell_*.bin | wc -l) per-hour grid files."
+
+      - name: Upload per-hour grids to R2 (gzip Content-Encoding)
         if: ${{ env.R2_ACCOUNT_ID != '' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -112,14 +139,43 @@ jobs:
           RUN_ID: ${{ steps.run.outputs.run_id }}
         run: |
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          # Upload all .bin files for this run. Overwriting is atomic-enough
-          # because the manifest switch below is the client's source of truth.
+          # Per-hour grids only (excludes points.bin) — tagged gzip-encoded.
           aws s3 cp --recursive --endpoint-url "$ENDPOINT" \
+            --exclude "*" --include "wind_*.bin" --include "swell_*.bin" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "application/octet-stream" \
+            --content-encoding "gzip" \
             "data/gfs/${RUN_ID}/" "s3://${R2_BUCKET}/data/gfs/${RUN_ID}/"
 
-          # Flip the manifest — clients fetch this on load to discover latest run.
+      - name: Upload point cube to R2 (raw, no encoding)
+        if: ${{ env.R2_ACCOUNT_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          RUN_ID: ${{ steps.run.outputs.run_id }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # Cube is range-requested; stored byte offsets must equal requested
+          # offsets, so no Content-Encoding.
+          aws s3 cp --endpoint-url "$ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/octet-stream" \
+            "data/gfs/${RUN_ID}/points.bin" \
+            "s3://${R2_BUCKET}/data/gfs/${RUN_ID}/points.bin"
+
+      - name: Flip R2 manifest
+        if: ${{ env.R2_ACCOUNT_ID != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          RUN_ID: ${{ steps.run.outputs.run_id }}
+        run: |
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # Clients fetch the manifest on load to discover the latest run.
           # Short cache-max-age so a new run propagates within a minute.
           echo "{\"model\":\"gfs\",\"run\":\"${RUN_ID}\",\"path\":\"/data/gfs/${RUN_ID}\"}" > /tmp/manifest-gfs.json
           aws s3 cp --endpoint-url "$ENDPOINT" \

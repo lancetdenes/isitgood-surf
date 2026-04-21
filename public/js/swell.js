@@ -170,17 +170,24 @@ export class SwellRenderer {
     const speedScale = zoomScale;  // slower when zoomed out, faster when zoomed in
 
     for (const p of this.particles) {
-      const vals = this.grid.interpolate(p.lng, p.lat);
-      if (!vals) {
-        Object.assign(p, this._randomParticle());
-        p.age = 0;
+      // Ocean-only interp: returns null if any of the 4 bilinear corners is
+      // land, which keeps particles from swimming onto the coastline and
+      // stops direction from reversing at the coast (land cells are stored
+      // as direction=0° and corrupt the sin/cos average).
+      const sw = this.grid.interpolateSwell(p.lng, p.lat, 0.1);
+      if (!sw) {
+        // Age out a bit so the fade trails clear cleanly, then respawn.
+        p.age++;
+        if (p.age >= this.maxAge) {
+          Object.assign(p, this._randomParticle());
+          p.age = 0;
+        }
         continue;
       }
 
-      const height = vals[0];   // swell height (m)
-      const dirFrom = vals[1];  // direction waves come FROM (degrees, meteorological)
+      const height = sw.height;
+      const dirFrom = sw.direction;  // direction waves come FROM (degrees, meteorological)
 
-      // Skip flat/land areas
       if (height < 0.1) {
         p.age++;
         if (p.age >= this.maxAge) {

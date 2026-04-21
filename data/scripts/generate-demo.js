@@ -22,13 +22,25 @@ const LA1 = 90;    // first lat (north to south)
 const DX = 1.0;
 const DY = 1.0;
 
+/** Pick an int16 scale that preserves the array's range with headroom. */
+function deriveScale(arr) {
+  let maxAbs = 0;
+  for (let i = 0; i < arr.length; i++) {
+    const v = Math.abs(arr[i]);
+    if (v > maxAbs) maxAbs = v;
+  }
+  if (maxAbs === 0) return { scale: 1.0, offset: 0 };
+  return { scale: maxAbs / 32000, offset: 0 };
+}
+
 function writeBinary(filePath, nParams, ...arrays) {
   const gridSize = NX * NY;
-  const bufSize = 32 + nParams * gridSize * 4;
+  const headerSize = 32 + nParams * 8;
+  const bufSize = headerSize + nParams * gridSize * 2;
   const buf = Buffer.alloc(bufSize);
 
   // Header
-  buf.write('SURF', 0, 4, 'ascii');
+  buf.write('SRF2', 0, 4, 'ascii');
   buf.writeUInt32LE(NX, 4);
   buf.writeUInt32LE(NY, 8);
   buf.writeFloatLE(LO1, 12);
@@ -37,11 +49,23 @@ function writeBinary(filePath, nParams, ...arrays) {
   buf.writeFloatLE(DY, 24);
   buf.writeUInt32LE(nParams, 28);
 
-  // Data arrays
+  // Scale table
+  const scales = arrays.map(deriveScale);
   for (let p = 0; p < nParams; p++) {
-    const offset = 32 + p * gridSize * 4;
+    const o = 32 + p * 8;
+    buf.writeFloatLE(scales[p].scale, o);
+    buf.writeFloatLE(scales[p].offset, o + 4);
+  }
+
+  // Int16 data arrays
+  for (let p = 0; p < nParams; p++) {
+    const { scale, offset } = scales[p];
+    const base = headerSize + p * gridSize * 2;
     for (let i = 0; i < gridSize; i++) {
-      buf.writeFloatLE(arrays[p][i], offset + i * 4);
+      let q = Math.round((arrays[p][i] - offset) / scale);
+      if (q < -32768) q = -32768;
+      else if (q > 32767) q = 32767;
+      buf.writeInt16LE(q, base + i * 2);
     }
   }
 
@@ -205,6 +229,108 @@ function generateSwellField(hourOffset) {
   return { height, direction, period };
 }
 
+/** Parse an SRF2 file we just wrote, returning decoded float32 arrays. */
+function readSrf2(filePath) {
+  const buf = fs.readFileSync(filePath);
+  const magic = buf.slice(0, 4).toString('ascii');
+  if (magic !== 'SRF2') throw new Error(`${filePath}: not SRF2 (magic=${magic})`);
+  const nx = buf.readUInt32LE(4);
+  const ny = buf.readUInt32LE(8);
+  const nParams = buf.readUInt32LE(28);
+  const scales = [];
+  for (let p = 0; p < nParams; p++) {
+    scales.push({ scale: buf.readFloatLE(32 + p * 8), offset: buf.readFloatLE(36 + p * 8) });
+  }
+  const dataOffset = 32 + nParams * 8;
+  const gridSize = nx * ny;
+  const arrays = [];
+  for (let p = 0; p < nParams; p++) {
+    const src = new Int16Array(buf.buffer, buf.byteOffset + dataOffset + p * gridSize * 2, gridSize);
+    const dst = new Float32Array(gridSize);
+    const { scale, offset } = scales[p];
+    for (let i = 0; i < gridSize; i++) dst[i] = src[i] * scale + offset;
+    arrays.push(dst);
+  }
+  return { nx, ny, nParams, arrays };
+}
+
+/** Build the SCUB cube from per-hour SRF2 files we just generated.
+ *  Mirrors process-grib.py's build_cube so local dev (demo data) can test the
+ *  panel's range-request code path. */
+function buildDemoCube(outPath, hours) {
+  const gridSize = NX * NY;
+  const nHours = hours.length;
+  const nParams = 5; // u, v, swell_h, swell_dir, swell_period
+
+  // Read the per-hour grids we just wrote.
+  const streams = [[], [], [], [], []]; // one stream per param
+  for (const h of hours) {
+    const fhr = String(h).padStart(3, '0');
+    const w = readSrf2(path.join(DEMO_DIR, `wind_f${fhr}.bin`));
+    const s = readSrf2(path.join(DEMO_DIR, `swell_f${fhr}.bin`));
+    streams[0].push(w.arrays[0]);
+    streams[1].push(w.arrays[1]);
+    streams[2].push(s.arrays[0]);
+    streams[3].push(s.arrays[1]);
+    streams[4].push(s.arrays[2]);
+  }
+
+  // Global per-param scale across all hours (keeps decode uniform).
+  const scales = streams.map(stream => {
+    let maxAbs = 0;
+    for (const arr of stream) {
+      for (let i = 0; i < arr.length; i++) {
+        const v = Math.abs(arr[i]);
+        if (v > maxAbs) maxAbs = v;
+      }
+    }
+    return { scale: maxAbs > 0 ? maxAbs / 32000 : 1.0, offset: 0 };
+  });
+
+  const headerBytes = 64 + nHours * 4 + nParams * 8;
+  const totalBytes = headerBytes + gridSize * nHours * nParams * 2;
+  const buf = Buffer.alloc(totalBytes);
+
+  buf.write('SCUB', 0, 4, 'ascii');
+  buf.writeUInt32LE(NX, 4);
+  buf.writeUInt32LE(NY, 8);
+  buf.writeFloatLE(LO1, 12);
+  buf.writeFloatLE(LA1, 16);
+  buf.writeFloatLE(DX, 20);
+  buf.writeFloatLE(DY, 24);
+  buf.writeUInt32LE(nHours, 28);
+  buf.writeUInt32LE(nParams, 32);
+  buf.writeUInt32LE(1, 36); // version
+
+  for (let i = 0; i < nHours; i++) buf.writeUInt32LE(hours[i], 64 + i * 4);
+  const scaleBase = 64 + nHours * 4;
+  for (let p = 0; p < nParams; p++) {
+    buf.writeFloatLE(scales[p].scale, scaleBase + p * 8);
+    buf.writeFloatLE(scales[p].offset, scaleBase + p * 8 + 4);
+  }
+
+  // Cell-major data section. One Int16 write per (cell, hour, param) slot
+  // keeps the layout explicit and portable; Buffer.from on typed arrays has
+  // endianness footguns on big-endian platforms.
+  let off = headerBytes;
+  for (let cellIdx = 0; cellIdx < gridSize; cellIdx++) {
+    for (let h = 0; h < nHours; h++) {
+      for (let p = 0; p < nParams; p++) {
+        const { scale, offset } = scales[p];
+        let q = Math.round((streams[p][h][cellIdx] - offset) / scale);
+        if (q < -32768) q = -32768;
+        else if (q > 32767) q = 32767;
+        buf.writeInt16LE(q, off);
+        off += 2;
+      }
+    }
+  }
+
+  fs.writeFileSync(outPath, buf);
+  const sizeMB = (totalBytes / (1024 * 1024)).toFixed(1);
+  console.log(`\n  Wrote ${outPath} (${sizeMB} MB cube)`);
+}
+
 // ── Main ──
 console.log('Generating demo data...');
 
@@ -232,4 +358,7 @@ for (const h of hours) {
 console.log('\n\nDemo data written to data/demo/');
 console.log(`  ${hours.length} wind files + ${hours.length} swell files`);
 console.log(`  Grid: ${NX}x${NY} (1° global)`);
+
+buildDemoCube(path.join(DEMO_DIR, 'points.bin'), hours);
+
 console.log('\nRun: npm start');

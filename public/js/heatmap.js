@@ -222,24 +222,31 @@ export class HeatmapRenderer {
     const mercNorth = this._latToMercY(north);
     const mercSouth = this._latToMercY(south);
 
+    const isSwell = this.mode === 'swell';
     for (let row = 0; row < h; row++) {
       const mercY = mercNorth - (row / (h - 1)) * (mercNorth - mercSouth);
       const lat = this._mercYToLat(mercY);
       for (let col = 0; col < w; col++) {
         const lon = west + (col / (w - 1)) * (east - west);
-        const vals = this.grid.interpolate(lon, lat);
         const px = (row * w + col) * 4;
 
-        if (!vals) {
-          data[px] = 0; data[px + 1] = 0; data[px + 2] = 0; data[px + 3] = 0;
-          continue;
-        }
-
+        // Swell uses an ocean-only interpolator so pixels whose bilinear cell
+        // touches land stay transparent — no smeared heights over coastline.
         let magnitude;
-        if (this.mode === 'wind') {
-          magnitude = Math.sqrt(vals[0] * vals[0] + vals[1] * vals[1]);
+        if (isSwell) {
+          const sw = this.grid.interpolateSwell(lon, lat);
+          if (!sw) {
+            data[px] = 0; data[px + 1] = 0; data[px + 2] = 0; data[px + 3] = 0;
+            continue;
+          }
+          magnitude = sw.height;
         } else {
-          magnitude = vals[0];
+          const vals = this.grid.interpolate(lon, lat);
+          if (!vals) {
+            data[px] = 0; data[px + 1] = 0; data[px + 2] = 0; data[px + 3] = 0;
+            continue;
+          }
+          magnitude = Math.sqrt(vals[0] * vals[0] + vals[1] * vals[1]);
         }
 
         if (magnitude < 0.05) {

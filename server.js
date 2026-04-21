@@ -116,11 +116,11 @@ app.get('/api/latest/:model', (req, res) => {
 // Returns all forecast hours for a single lat/lon in one request.
 // This avoids the client downloading 57+ binary grid files individually.
 
-// Binary grid parser (matches public/js/grid.js)
+// Binary grid parser (matches public/js/grid.js — SRF2 int16 format)
 function parseGrid(buffer) {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   const magic = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
-  if (magic !== 'SURF') return null;
+  if (magic !== 'SRF2') return null;
 
   const nx = view.getUint32(4, true);
   const ny = view.getUint32(8, true);
@@ -131,10 +131,25 @@ function parseGrid(buffer) {
   const nParams = view.getUint32(28, true);
   const gridSize = nx * ny;
 
+  // Scale table: nParams × (scale float32, offset float32)
+  const scales = new Array(nParams);
+  const scaleTableOffset = 32;
+  for (let p = 0; p < nParams; p++) {
+    const o = scaleTableOffset + p * 8;
+    scales[p] = { scale: view.getFloat32(o, true), offset: view.getFloat32(o + 4, true) };
+  }
+
+  const dataOffset = scaleTableOffset + nParams * 8;
   const arrays = [];
   for (let p = 0; p < nParams; p++) {
-    const offset = 32 + p * gridSize * 4;
-    arrays.push(new Float32Array(buffer.buffer, buffer.byteOffset + offset, gridSize));
+    const byteOffset = buffer.byteOffset + dataOffset + p * gridSize * 2;
+    const src = new Int16Array(buffer.buffer, byteOffset, gridSize);
+    const dst = new Float32Array(gridSize);
+    const { scale, offset } = scales[p];
+    for (let i = 0; i < gridSize; i++) {
+      dst[i] = src[i] * scale + offset;
+    }
+    arrays.push(dst);
   }
   return { nx, ny, lo1, la1, dx, dy, arrays };
 }
@@ -187,10 +202,10 @@ function interpolateAngle(grid, paramIdx, lon, lat) {
 
 // Cache parsed grids in memory (key = file path)
 const gridCache = new Map();
-// Sized to hold a full run in memory (57 wind × 8 MB + 57 swell × 1.3 MB ≈ 530 MB)
-// plus headroom for a partial incoming run during atomic swap. Too-low values
-// (< 114) cause catastrophic cache thrashing on /api/forecast (one request
-// touches every file in the run).
+// Grids are stored as Float32Array after parse (~8 MB wind, ~12.5 MB swell per
+// hour). 150 entries covers a full run + headroom for a partial incoming run
+// during atomic swap. Values < 114 thrash the cache on /api/forecast because
+// one request touches every file in the run.
 const CACHE_MAX = 150;
 const fsPromises = require('fs').promises;
 
