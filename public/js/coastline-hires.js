@@ -138,7 +138,7 @@ export function getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, m
 
   const halfKm = maxKm / 2;
   const cosLat = Math.cos(centerLat * Math.PI / 180);
-  const BREAK_KM = 5;
+  const BREAK_KM = 20;
 
   /** Fetch vertex [lon, lat] and normalize lon to [-180, 180]. */
   function v(i) {
@@ -202,7 +202,8 @@ export function getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, m
   }
   if (current.length) subpaths.push(current);
 
-  return { subpaths, landSide: 'right' };
+  const filtered = subpaths.filter(sp => sp.length >= 2);
+  return { subpaths: filtered, landSide: 'right' };
 }
 
 /**
