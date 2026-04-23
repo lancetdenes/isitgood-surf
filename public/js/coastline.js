@@ -9,6 +9,12 @@
 let coastData = null;
 let _loadPromise = null;
 
+/** Test hook: inject coastline data directly without going through fetch. */
+export function _setCoastData(data) {
+  coastData = data;
+  _loadPromise = Promise.resolve();
+}
+
 /** Load the bundled coastline GeoJSON. Idempotent; concurrent callers share one fetch. */
 export function loadCoastline() {
   if (_loadPromise) return _loadPromise;
