@@ -60,17 +60,21 @@ function stepAlongBearing(lat, lon, brgDeg, distKm) {
 }
 
 /**
- * Sample the swell grid at `distKm` along `brgDeg` from (coastLat, coastLon).
- * Returns true if the sample is in open ocean (swell grid has a value for the cell).
- * Returns true if no grid is provided (so callers don't over-constrain).
+ * Sample the grid at least 2 grid cells along `brgDeg` from (coastLat, coastLon).
+ * Returns true if the sample is over ocean, true if no grid is provided.
  *
- * Uses `interpolateSwell` which returns null for any bilinear neighborhood
- * containing land — the correct semantic for "is this a clean offshore point".
+ * Probe distance scales with the grid's cell size (max(30 km, 2 × cell)) so
+ * we reliably cross into a neighboring cell. At 0.25° GFS that's ~45 km; at
+ * the 1° demo grid that's ~175 km. A fixed 10 km probe was less than one
+ * cell width and effectively tested the same cell the coast point is in.
  */
-function isOcean(grid, coastLat, coastLon, brgDeg, distKm = 10) {
-  if (!grid || typeof grid.interpolateSwell !== 'function') return true;
+function isOcean(grid, coastLat, coastLon, brgDeg) {
+  if (!grid || typeof grid.isWet !== 'function') return true;
+  const cellKmLat = grid.dy * 111;
+  const cellKmLon = grid.dx * 111 * Math.cos(coastLat * Math.PI / 180);
+  const distKm = Math.max(30, Math.min(cellKmLat, cellKmLon) * 2);
   const [lat, lon] = stepAlongBearing(coastLat, coastLon, brgDeg, distKm);
-  return grid.interpolateSwell(lon, lat) !== null;
+  return grid.isWet(lon, lat);
 }
 
 /**

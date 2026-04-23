@@ -99,8 +99,11 @@ test('Fix 2: gentle curve produces symmetric bearing (no walk-order contaminatio
 
 // Stub swell grid: returns a swell result on ocean, null on land.
 // South of lat=40 is ocean, north is land.
+// dx/dy=1 so the resolution-aware probe uses max(30, min(111,85)*2) = max(30,170) = 170 km.
 function southOceanGrid() {
   return {
+    dx: 1, dy: 1,
+    isWet: (lon, lat) => lat < 40,
     interpolateSwell: (lon, lat) => {
       if (lat < 40) return { height: 2, direction: 180, period: 10 }; // ocean
       return null; // land
@@ -139,16 +142,17 @@ test('Fix 2: detects and corrects a winding flip', () => {
   assert.equal(r.seawardFlipped, true);
 });
 
-// Two parallel E-W coastlines 20 km apart — simulates a bay or sound.
-// Click just south of the NORTH coast (closer to north coast = "bay back wall").
+// Two parallel E-W coastlines, ~200 km apart (to contain the 170 km resolution-aware probe).
+// The north coast has only 4 segments so that the south coast fits in the top-5 candidate
+// list despite being farther away. Click just south of the NORTH coast (nearest = bay wall).
 // With the bay-scenario grid: seaward from north coast = north = land, flip = south
-// = still "land" because the bay interior is also masked.
+// = still "land" because the entire bay interior is masked.
 // The retry should fall through to the SOUTH coast where seaward = south = ocean.
 function twoParallelCoasts() {
-  const north = [];
-  for (let i = 0; i < 20; i++) north.push([-75 + i * 0.1, 40]);
-  const south = [];
-  for (let i = 0; i < 20; i++) south.push([-75 + i * 0.1, 39.8]);
+  // 5 vertices = 4 segments. All 4 fit in top-5 candidates, leaving slot 5 for south coast.
+  const north = [[-75, 40], [-74.7, 40], [-74.5, 40], [-74.3, 40], [-74, 40]];
+  // South coast is ~200 km south (lat 38.2). One long segment so it's a single candidate.
+  const south = [[-75, 38.2], [-74, 38.2]];
   return {
     type: 'FeatureCollection',
     features: [
@@ -159,13 +163,15 @@ function twoParallelCoasts() {
 }
 
 function bayScenarioGrid() {
-  // Between the two coasts (lat 39.8–40) is "land" (enclosed bay).
-  // Only south of 39.8 is open ocean.
+  // Between the two coasts (lat 38.2–40) is "land" (enclosed bay wide enough for probe).
+  // Only south of 38.2 is open ocean.
+  // dx/dy=1 → probe = max(30, min(111,85)*2) = 170 km.
+  // From north coast (lat 40) probing south 170 km → lat ~38.47 → NOT wet (38.47 > 38.2). Good.
+  // From south coast (lat 38.2) probing south 170 km → lat ~36.67 → wet (< 38.2). Good.
   return {
-    interpolateSwell: (lon, lat) => {
-      if (lat < 39.8) return { height: 2, direction: 180, period: 10 };
-      return null;
-    },
+    dx: 1, dy: 1,
+    isWet: (lon, lat) => lat < 38.2,
+    interpolateSwell: (lon, lat) => (lat < 38.2 ? { height: 2, direction: 180, period: 10 } : null),
   };
 }
 
@@ -173,8 +179,8 @@ test('Fix 2: retries with next-nearest coast when both directions are land', () 
   _setCoastData(twoParallelCoasts());
   // Click slightly south of the north coast — nearest is the north coast.
   const r = findNearestCoast(39.95, -74.5, bayScenarioGrid());
-  // After retry, we should land on the south coast (lat ~39.8), facing south ocean.
-  assert.ok(Math.abs(r.coastLat - 39.8) < 0.05, `coastLat ${r.coastLat} should be ~39.8 after retry`);
+  // After retry, we should land on the south coast (lat ~38.2), facing south ocean.
+  assert.ok(Math.abs(r.coastLat - 38.2) < 0.05, `coastLat ${r.coastLat} should be ~38.2 after retry`);
   const diff = Math.abs(((r.seawardDir - 180 + 540) % 360) - 180);
   assert.ok(diff < 10, `seawardDir ${r.seawardDir} not near 180° after retry`);
 });
@@ -187,4 +193,40 @@ test('fixture loader: real coastline and swell grid load without error', () => {
   const sample = grid.interpolateSwell(-157.7, 21.3);
   assert.ok(sample, 'open Pacific sample should not be null');
   assert.ok(sample.height >= 0);
+});
+
+const FIXTURES = [
+  { name: 'Rockaway Beach, NY',    lat: 40.585,  lon: -73.82,  seaward: 180, tol: 20 },
+  { name: 'Ocean Beach, SF',       lat: 37.75,   lon: -122.51, seaward: 270, tol: 20 },
+  { name: 'Pipeline, Oahu',        lat: 21.66,   lon: -158.05, seaward: 0,   tol: 60 },
+  { name: 'Hossegor, France',      lat: 43.665,  lon: -1.44,   seaward: 270, tol: 20 },
+  { name: 'Malibu First Point',    lat: 34.035,  lon: -118.68, seaward: 200, tol: 60 },
+  // J-Bay faces SSE (open Indian Ocean), NOT ENE. The coast at Supertubes runs SW-NE,
+  // so seaward is perpendicular to the south-southeast.
+  { name: 'J-Bay, South Africa',   lat: -34.05,  lon: 24.93,   seaward: 155, tol: 30 },
+];
+
+test('real-world fixtures return seaward directions within tolerance', () => {
+  _setCoastData(loadRealCoastline());
+  const grid = loadRealSwellGrid('data/demo/swell_f000.bin');
+  const failures = [];
+  const skipped = [];
+  for (const f of FIXTURES) {
+    const r = findNearestCoast(f.lat, f.lon, grid);
+    if (r.unreliableBearing) {
+      // The demo grid doesn't cover some Atlantic / Pacific-coast regions,
+      // so the grid-validated seaward check can't run. Log and skip rather
+      // than fake-pass with a meaningless tolerance. Production GFS at
+      // 0.25° has full global coverage and these fixtures will be
+      // exercised there.
+      skipped.push(`${f.name} (unreliable: demo grid lacks coverage)`);
+      continue;
+    }
+    const diff = Math.abs(((r.seawardDir - f.seaward + 540) % 360) - 180);
+    if (diff > f.tol) {
+      failures.push(`${f.name}: expected ${f.seaward}° ±${f.tol}°, got ${r.seawardDir.toFixed(1)}° (diff ${diff.toFixed(1)}°). flipped=${r.seawardFlipped}, coastAt=(${r.coastLat.toFixed(3)},${r.coastLon.toFixed(3)})`);
+    }
+  }
+  if (skipped.length) console.log('  Skipped (data-limited):', skipped.join('; '));
+  assert.equal(failures.length, 0, failures.join('\n  '));
 });
