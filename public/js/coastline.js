@@ -101,126 +101,132 @@ function projectOntoSegment(pLon, pLat, aLon, aLat, bLon, bLat) {
 export function findNearestCoast(lat, lon, grid) {
   if (!coastData) throw new Error('Coastline not loaded');
 
-  let bestDist = Infinity;
-  let bestFeatureIdx = -1;
-  let bestSegIdx = -1;
-  let bestPt = null;
+  const TOP_N = 5;
+  const candidates = []; // sorted ascending by dist
 
-  // Search all features for closest point on any segment
+  function insertCandidate(c) {
+    let i = 0;
+    while (i < candidates.length && candidates[i].dist < c.dist) i++;
+    candidates.splice(i, 0, c);
+    if (candidates.length > TOP_N) candidates.pop();
+  }
+
+  // Scan every segment, tracking the top-N nearest.
   for (let f = 0; f < coastData.features.length; f++) {
     const coords = coastData.features[f].geometry.coordinates;
     for (let i = 0; i < coords.length - 1; i++) {
       const [aLon, aLat] = coords[i];
       const [bLon, bLat] = coords[i + 1];
 
-      // Quick bounding check
       const minLat = Math.min(aLat, bLat) - 2;
       const maxLat = Math.max(aLat, bLat) + 2;
       const minLon = Math.min(aLon, bLon) - 2;
       const maxLon = Math.max(aLon, bLon) + 2;
       if (lat < minLat || lat > maxLat || lon < minLon || lon > maxLon) continue;
 
-      // Project click point onto segment
       const proj = projectOntoSegment(lon, lat, aLon, aLat, bLon, bLat);
       const d = haversine(lat, lon, proj.lat, proj.lon);
 
-      if (d < bestDist) {
-        bestDist = d;
-        bestFeatureIdx = f;
-        bestSegIdx = i;
-        bestPt = [proj.lat, proj.lon];
+      if (candidates.length < TOP_N || d < candidates[candidates.length - 1].dist) {
+        insertCandidate({ dist: d, featureIdx: f, segIdx: i, pt: [proj.lat, proj.lon] });
       }
     }
   }
 
-  if (!bestPt) {
+  if (candidates.length === 0) {
     return {
-      coastLat: lat, coastLon: lon,
-      distance: Infinity,
-      coastBearing: 45,
-      seawardDir: 135,
-      offshoreDir: 315,
-      featureIdx: -1,
-      segIdx: -1,
-      seawardFlipped: false,
-      unreliableBearing: true,
+      coastLat: lat, coastLon: lon, distance: Infinity,
+      coastBearing: 45, seawardDir: 135, offshoreDir: 315,
+      featureIdx: -1, segIdx: -1,
+      seawardFlipped: false, unreliableBearing: true,
     };
   }
 
-  // Compute smoothed coast bearing using an adaptive window that stops at corners.
-  // Each direction is walked independently: both start from the winning segment's
-  // bearing and include neighbors while they stay within 25° of the direction-local
-  // running mean. After both walks finish, the final bearing is the sin/cos average
-  // over all accepted segments (including the center once).
-  const coords = coastData.features[bestFeatureIdx].geometry.coordinates;
-  const MAX_STEPS = 3;
-  const CORNER_THRESHOLD_DEG = 25;
+  // Per-candidate processing: compute bearing with adaptive window, then validate
+  // seaward against the grid (flip if needed). Returns a result object plus a
+  // `bothFailed` flag when neither seawardDir nor its 180° flip pointed at ocean.
+  function processCandidate(cand) {
+    const coords = coastData.features[cand.featureIdx].geometry.coordinates;
+    const MAX_STEPS = 3;
+    const CORNER_THRESHOLD_DEG = 25;
 
-  function segBearing(idx) {
-    if (idx < 0 || idx >= coords.length - 1) return null;
-    const [aLon, aLat] = coords[idx];
-    const [bLon, bLat] = coords[idx + 1];
-    return bearing(aLat, aLon, bLat, bLon);
-  }
-
-  const centerBearing = segBearing(bestSegIdx);
-  const accepted = [centerBearing];
-
-  function walk(step) {
-    let localSin = Math.sin(centerBearing * Math.PI / 180);
-    let localCos = Math.cos(centerBearing * Math.PI / 180);
-    let localMean = centerBearing;
-    for (let k = 1; k <= MAX_STEPS; k++) {
-      const b = segBearing(bestSegIdx + step * k);
-      if (b == null) break;
-      const diff = Math.abs(((b - localMean + 540) % 360) - 180);
-      if (diff > CORNER_THRESHOLD_DEG) break;
-      accepted.push(b);
-      localSin += Math.sin(b * Math.PI / 180);
-      localCos += Math.cos(b * Math.PI / 180);
-      localMean = (Math.atan2(localSin, localCos) * 180 / Math.PI + 360) % 360;
+    function segBearing(idx) {
+      if (idx < 0 || idx >= coords.length - 1) return null;
+      const [aLon, aLat] = coords[idx];
+      const [bLon, bLat] = coords[idx + 1];
+      return bearing(aLat, aLon, bLat, bLon);
     }
-  }
 
-  walk(-1);
-  walk(1);
+    const centerBearing = segBearing(cand.segIdx);
+    const accepted = [centerBearing];
 
-  let finalSin = 0, finalCos = 0;
-  for (const b of accepted) {
-    finalSin += Math.sin(b * Math.PI / 180);
-    finalCos += Math.cos(b * Math.PI / 180);
-  }
-  const coastBearing = (Math.atan2(finalSin, finalCos) * 180 / Math.PI + 360) % 360;
-
-  // Seaward = right perpendicular of coast line direction.
-  // Natural Earth coastlines follow the convention where water is on the right
-  // side of the line direction (derived from counterclockwise land polygon boundaries).
-  const seawardDir = (coastBearing + 90) % 360;
-
-  // Validate against the grid. If the assumed seaward points at land, this is
-  // likely a winding-order flip — try 180° and record the diagnostic.
-  let finalSeaward = seawardDir;
-  let seawardFlipped = false;
-  if (grid && !isOcean(grid, bestPt[0], bestPt[1], finalSeaward)) {
-    const flipped = (finalSeaward + 180) % 360;
-    if (isOcean(grid, bestPt[0], bestPt[1], flipped)) {
-      finalSeaward = flipped;
-      seawardFlipped = true;
+    function walk(step) {
+      let localSin = Math.sin(centerBearing * Math.PI / 180);
+      let localCos = Math.cos(centerBearing * Math.PI / 180);
+      let localMean = centerBearing;
+      for (let k = 1; k <= MAX_STEPS; k++) {
+        const b = segBearing(cand.segIdx + step * k);
+        if (b == null) break;
+        const diff = Math.abs(((b - localMean + 540) % 360) - 180);
+        if (diff > CORNER_THRESHOLD_DEG) break;
+        accepted.push(b);
+        localSin += Math.sin(b * Math.PI / 180);
+        localCos += Math.cos(b * Math.PI / 180);
+        localMean = (Math.atan2(localSin, localCos) * 180 / Math.PI + 360) % 360;
+      }
     }
+
+    walk(-1);
+    walk(1);
+
+    let finalSin = 0, finalCos = 0;
+    for (const b of accepted) {
+      finalSin += Math.sin(b * Math.PI / 180);
+      finalCos += Math.cos(b * Math.PI / 180);
+    }
+    const coastBearing = (Math.atan2(finalSin, finalCos) * 180 / Math.PI + 360) % 360;
+
+    let seawardDir = (coastBearing + 90) % 360;
+    let seawardFlipped = false;
+    let bothFailed = false;
+
+    if (grid) {
+      if (!isOcean(grid, cand.pt[0], cand.pt[1], seawardDir)) {
+        const flipped = (seawardDir + 180) % 360;
+        if (isOcean(grid, cand.pt[0], cand.pt[1], flipped)) {
+          seawardDir = flipped;
+          seawardFlipped = true;
+        } else {
+          bothFailed = true;
+        }
+      }
+    }
+
+    return {
+      coastLat: cand.pt[0], coastLon: cand.pt[1],
+      distance: cand.dist,
+      coastBearing,
+      seawardDir,
+      offshoreDir: (seawardDir + 180) % 360,
+      featureIdx: cand.featureIdx,
+      segIdx: cand.segIdx,
+      seawardFlipped,
+      unreliableBearing: false,
+      bothFailed,
+    };
   }
 
-  return {
-    coastLat: bestPt[0],
-    coastLon: bestPt[1],
-    distance: bestDist,
-    coastBearing,
-    seawardDir: finalSeaward,
-    offshoreDir: (finalSeaward + 180) % 360,
-    featureIdx: bestFeatureIdx,
-    segIdx: bestSegIdx,
-    seawardFlipped,
-    unreliableBearing: false,
-  };
+  // Try each candidate. First one whose seaward (possibly flipped) is wet wins.
+  let lastResult = null;
+  for (const cand of candidates) {
+    const res = processCandidate(cand);
+    lastResult = res;
+    if (!res.bothFailed) break;
+  }
+
+  if (lastResult.bothFailed) lastResult.unreliableBearing = true;
+  delete lastResult.bothFailed;
+  return lastResult;
 }
 
 /**

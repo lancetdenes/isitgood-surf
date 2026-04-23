@@ -137,3 +137,43 @@ test('Fix 2: detects and corrects a winding flip', () => {
   assert.ok(diff < 5, `seawardDir ${r.seawardDir} not corrected to 180° (diff=${diff})`);
   assert.equal(r.seawardFlipped, true);
 });
+
+// Two parallel E-W coastlines 20 km apart — simulates a bay or sound.
+// Click just south of the NORTH coast (closer to north coast = "bay back wall").
+// With the bay-scenario grid: seaward from north coast = north = land, flip = south
+// = still "land" because the bay interior is also masked.
+// The retry should fall through to the SOUTH coast where seaward = south = ocean.
+function twoParallelCoasts() {
+  const north = [];
+  for (let i = 0; i < 20; i++) north.push([-75 + i * 0.1, 40]);
+  const south = [];
+  for (let i = 0; i < 20; i++) south.push([-75 + i * 0.1, 39.8]);
+  return {
+    type: 'FeatureCollection',
+    features: [
+      { type: 'Feature', geometry: { type: 'LineString', coordinates: north } },
+      { type: 'Feature', geometry: { type: 'LineString', coordinates: south } },
+    ],
+  };
+}
+
+function bayScenarioGrid() {
+  // Between the two coasts (lat 39.8–40) is "land" (enclosed bay).
+  // Only south of 39.8 is open ocean.
+  return {
+    interpolateSwell: (lon, lat) => {
+      if (lat < 39.8) return { height: 2, direction: 180, period: 10 };
+      return null;
+    },
+  };
+}
+
+test('Fix 2: retries with next-nearest coast when both directions are land', () => {
+  _setCoastData(twoParallelCoasts());
+  // Click slightly south of the north coast — nearest is the north coast.
+  const r = findNearestCoast(39.95, -74.5, bayScenarioGrid());
+  // After retry, we should land on the south coast (lat ~39.8), facing south ocean.
+  assert.ok(Math.abs(r.coastLat - 39.8) < 0.05, `coastLat ${r.coastLat} should be ~39.8 after retry`);
+  const diff = Math.abs(((r.seawardDir - 180 + 540) % 360) - 180);
+  assert.ok(diff < 10, `seawardDir ${r.seawardDir} not near 180° after retry`);
+});
