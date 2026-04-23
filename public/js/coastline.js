@@ -49,6 +49,31 @@ function bearing(lat1, lon1, lat2, lon2) {
 }
 
 /**
+ * Walk `distKm` from (lat, lon) along bearing `brgDeg` and return the target lat/lon.
+ * Flat-earth approximation — fine for 10 km moves at any non-polar latitude.
+ */
+function stepAlongBearing(lat, lon, brgDeg, distKm) {
+  const rad = brgDeg * Math.PI / 180;
+  const dLat = (distKm / 111) * Math.cos(rad);
+  const dLon = (distKm / (111 * Math.cos(lat * Math.PI / 180))) * Math.sin(rad);
+  return [lat + dLat, lon + dLon];
+}
+
+/**
+ * Sample the swell grid at `distKm` along `brgDeg` from (coastLat, coastLon).
+ * Returns true if the sample is in open ocean (swell grid has a value for the cell).
+ * Returns true if no grid is provided (so callers don't over-constrain).
+ *
+ * Uses `interpolateSwell` which returns null for any bilinear neighborhood
+ * containing land — the correct semantic for "is this a clean offshore point".
+ */
+function isOcean(grid, coastLat, coastLon, brgDeg, distKm = 10) {
+  if (!grid || typeof grid.interpolateSwell !== 'function') return true;
+  const [lat, lon] = stepAlongBearing(coastLat, coastLon, brgDeg, distKm);
+  return grid.interpolateSwell(lon, lat) !== null;
+}
+
+/**
  * Project a point onto a line segment and return the closest point on the segment.
  * Works in lon/lat space (good enough for small distances).
  */
@@ -117,6 +142,8 @@ export function findNearestCoast(lat, lon, grid) {
       offshoreDir: 315,
       featureIdx: -1,
       segIdx: -1,
+      seawardFlipped: false,
+      unreliableBearing: true,
     };
   }
 
@@ -169,17 +196,30 @@ export function findNearestCoast(lat, lon, grid) {
   // Natural Earth coastlines follow the convention where water is on the right
   // side of the line direction (derived from counterclockwise land polygon boundaries).
   const seawardDir = (coastBearing + 90) % 360;
-  const offshoreDir = (seawardDir + 180) % 360;
+
+  // Validate against the grid. If the assumed seaward points at land, this is
+  // likely a winding-order flip — try 180° and record the diagnostic.
+  let finalSeaward = seawardDir;
+  let seawardFlipped = false;
+  if (grid && !isOcean(grid, bestPt[0], bestPt[1], finalSeaward)) {
+    const flipped = (finalSeaward + 180) % 360;
+    if (isOcean(grid, bestPt[0], bestPt[1], flipped)) {
+      finalSeaward = flipped;
+      seawardFlipped = true;
+    }
+  }
 
   return {
     coastLat: bestPt[0],
     coastLon: bestPt[1],
     distance: bestDist,
     coastBearing,
-    seawardDir,
-    offshoreDir,
+    seawardDir: finalSeaward,
+    offshoreDir: (finalSeaward + 180) % 360,
     featureIdx: bestFeatureIdx,
     segIdx: bestSegIdx,
+    seawardFlipped,
+    unreliableBearing: false,
   };
 }
 

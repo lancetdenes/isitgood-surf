@@ -95,3 +95,22 @@ test('Fix 2: gentle curve produces symmetric bearing (no walk-order contaminatio
   // algorithm, so we just check the result is stable and finite.
   assert.ok(r.coastBearing >= 0 && r.coastBearing < 360);
 });
+
+// Stub swell grid: returns a swell result on ocean, null on land.
+// South of lat=40 is ocean, north is land.
+function southOceanGrid() {
+  return {
+    interpolateSwell: (lon, lat) => {
+      if (lat < 40) return { height: 2, direction: 180, period: 10 }; // ocean
+      return null; // land
+    },
+  };
+}
+
+test('Fix 2: seaward direction is validated against grid (happy path, no flip)', () => {
+  _setCoastData(straightEWCoast()); // seaward = south = 180° per NE winding
+  const r = findNearestCoast(39.9, -74.5, southOceanGrid());
+  const diff = Math.abs(((r.seawardDir - 180 + 540) % 360) - 180);
+  assert.ok(diff < 5, `seawardDir ${r.seawardDir} not near 180° (diff=${diff})`);
+  assert.equal(r.seawardFlipped, false);
+});

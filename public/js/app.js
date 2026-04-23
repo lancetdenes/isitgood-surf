@@ -257,7 +257,7 @@ class App {
 
     try {
       await loadCoastline();
-      const coast = findNearestCoast(lat, lng, this.windGrid);
+      const coast = findNearestCoast(lat, lng, this.swellGrid);
       // Start geocode in background (don't block panel opening)
       const geocodePromise = reverseGeocode(lat, lng);
       // Pass our grid cache loader so the panel's 57-hour forecast reuses
