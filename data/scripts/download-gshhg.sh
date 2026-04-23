@@ -6,7 +6,7 @@ set -euo pipefail
 REF_DIR="$(dirname "$0")/../reference"
 ARCHIVE="$REF_DIR/gshhg-bin-2.3.7.zip"
 TARGET="$REF_DIR/gshhs_h.b"
-URL="https://www.ngdc.noaa.gov/mgg/shorelines/data/gshhg/latest/gshhg-bin-2.3.7.zip"
+URL="https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-bin-2.3.7.zip"
 
 mkdir -p "$REF_DIR"
 
@@ -21,5 +21,5 @@ if [[ ! -f "$ARCHIVE" ]]; then
 fi
 
 echo "Extracting gshhs_h.b..."
-unzip -j -o "$ARCHIVE" "gshhg-bin-2.3.7/gshhs_h.b" -d "$REF_DIR"
+unzip -j -o "$ARCHIVE" "gshhs_h.b" -d "$REF_DIR"
 echo "Done. $TARGET is ready."

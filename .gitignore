@@ -10,6 +10,7 @@ data/uploads/
 data/reference/*
 !data/reference/.gitkeep
 *.bin
+!public/assets/coastline-hires.bin
 *.grib2
 *.idx
 
