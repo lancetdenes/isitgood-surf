@@ -234,15 +234,44 @@ test('real-world fixtures return seaward directions within tolerance', () => {
 test('getCoastSnippet returns projected points around a segment, in km', () => {
   _setCoastData(straightEWCoast());
   const r = findNearestCoast(39.9, -74.5, null);
-  const snip = getCoastSnippet(r.featureIdx, r.segIdx, r.coastLat, r.coastLon, 30);
-  assert.ok(snip.points.length >= 2);
+  const snip = getCoastSnippet(r.featureIdx, r.segIdx, r.coastLat, r.coastLon, 10);
+  assert.ok(snip.subpaths.length >= 1, 'at least one subpath');
+  const allPts = snip.subpaths.flat();
+  assert.ok(allPts.length >= 2);
   // Origin should be near the coast point.
-  const dists = snip.points.map(p => Math.hypot(p.x, p.y));
+  const dists = allPts.map(p => Math.hypot(p.x, p.y));
   assert.ok(Math.min(...dists) < 2, 'one point should be near the origin');
-  // For a 30km snippet around a straight coast, vertices should be within ~20km
-  // of the center (each side walks up to ~15km).
-  const maxCoord = Math.max(...snip.points.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))));
-  assert.ok(maxCoord < 20, `snippet max extent ${maxCoord} km should be ~15`);
-  // landSide should be 'left' or 'right'
+  // For a 10 km snippet the walk stops after crossing halfKm=5 km, but the synthetic
+  // fixture has vertices spaced ~7.6 km apart so the first step already overshoots.
+  // Bound at 10 (maxKm itself) — verifies the snippet didn't balloon to 30+ km.
+  const maxCoord = Math.max(...allPts.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))));
+  assert.ok(maxCoord < 10, `snippet max extent ${maxCoord} km should be < 10`);
   assert.ok(snip.landSide === 'left' || snip.landSide === 'right');
+});
+
+test('getCoastSnippet splits the path at >5km vertex gaps (MultiLineString artifact)', () => {
+  // A feature whose coords jump 15km between coords[2] and coords[3],
+  // simulating a Natural Earth MultiLineString flattened into one array.
+  const gj = {
+    type: 'FeatureCollection',
+    features: [{
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-75.0, 40],
+          [-74.95, 40],
+          [-74.90, 40],
+          [-74.70, 40],   // 17km jump east from prev
+          [-74.65, 40],
+          [-74.60, 40],
+        ],
+      },
+    }],
+  };
+  _setCoastData(gj);
+  // Force a known segIdx by clicking near the first segment.
+  const snip = getCoastSnippet(0, 1, 40, -74.95, 40);
+  // Should have 2 subpaths: [coords 0..2] and [coords 3..5] (or similar).
+  assert.ok(snip.subpaths.length >= 2, `expected 2+ subpaths, got ${snip.subpaths.length}`);
 });

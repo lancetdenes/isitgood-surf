@@ -403,39 +403,23 @@ function renderCompass(size, h, coast, mini = false, bgColor = null) {
       </g>
     `;
   } else {
-    const clipId = `cc-${size}-${Math.random().toString(36).slice(2, 8)}`;
-    const snip = getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 30);
-    if (snip.points.length >= 2) {
-      // Scale so 15 km (half-span of 30 km snippet) maps to ~r pixels.
-      const scale = r / 15;
-      const pts = snip.points.map(p => ({
-        // SVG y-axis is inverted (down = positive), but our local km y = north,
-        // so negate y to make north appear at the top of the compass.
-        sx: cx + p.x * scale,
-        sy: cy - p.y * scale,
-      }));
-      const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.sx.toFixed(1)},${p.sy.toFixed(1)}`).join(' ');
-      // Close a land polygon by extending the endpoints to the inshore side of the compass.
-      // Inshore direction = opposite of seawardDir.
-      const inshoreRad = ((coast.seawardDir + 180) % 360) * Math.PI / 180;
-      const ext = r * 2.5;
-      const ex = Math.sin(inshoreRad) * ext;
-      const ey = -Math.cos(inshoreRad) * ext;
-      const last = pts[pts.length - 1];
-      const first = pts[0];
-      const landD = `${pathD} L ${(last.sx + ex).toFixed(1)},${(last.sy + ey).toFixed(1)} L ${(first.sx + ex).toFixed(1)},${(first.sy + ey).toFixed(1)} Z`;
-      coastSvg = `
-        <defs><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>
-        <g clip-path="url(#${clipId})">
-          <path d="${landD}" fill="rgba(194,140,102,0.12)" stroke="none"/>
-          <path d="${pathD}" stroke="rgba(148,163,184,0.5)" stroke-width="2" fill="none"/>
-        </g>
-      `;
+    const snip = getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 10);
+    if (snip.subpaths.length) {
+      // Scale so 5 km (half-span of 10 km snippet) maps to ~r pixels.
+      const scale = r / 5;
+      const paths = snip.subpaths.map(sub => {
+        return sub.map((p, i) => {
+          // SVG y-axis inverted: negate y so north appears at top of compass.
+          const sx = cx + p.x * scale;
+          const sy = cy - p.y * scale;
+          return `${i === 0 ? 'M' : 'L'} ${sx.toFixed(1)},${sy.toFixed(1)}`;
+        }).join(' ');
+      }).join(' ');
+      coastSvg = `<path d="${paths}" stroke="rgba(148,163,184,0.7)" stroke-width="2" fill="none"/>`;
     } else {
-      // Fallback to the old line if snippet unavailable.
+      // Fallback: generic line if no snippet available (e.g. unloaded coastline).
       coastSvg = `
         <g transform="translate(${cx},${cy}) rotate(${cb})">
-          <path d="M 0,-${r} A ${r} ${r} 0 0 1 0,${r}" fill="rgba(56,189,248,0.04)"/>
           <line x1="0" y1="-${r}" x2="0" y2="${r}" stroke="rgba(148,163,184,0.2)" stroke-width="2"/>
         </g>
       `;

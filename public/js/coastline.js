@@ -239,13 +239,19 @@ export function findNearestCoast(lat, lon, grid) {
  * Return ~maxKm of local coastline centered on a segment, projected into local
  * kilometers relative to (centerLat, centerLon). Used by the compass renderer.
  *
- * @returns {{ points: Array<{x: number, y: number}>, landSide: 'left'|'right' }}
+ * Breaks the output into subpaths whenever consecutive Natural Earth vertices
+ * are more than `BREAK_KM` apart — otherwise MultiLineString features that
+ * got flattened into one array (Long Island, Hawaiian islands, etc.) render
+ * as zigzags jumping across land.
+ *
+ * @returns {{ subpaths: Array<Array<{x: number, y: number}>>, landSide: 'left'|'right' }}
  */
-export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm = 30) {
-  if (!coastData || featureIdx < 0) return { points: [], landSide: 'right' };
+export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm = 10) {
+  if (!coastData || featureIdx < 0) return { subpaths: [], landSide: 'right' };
   const coords = coastData.features[featureIdx].geometry.coordinates;
   const halfKm = maxKm / 2;
   const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const BREAK_KM = 5;
 
   function toLocal(lon, lat) {
     return {
@@ -254,41 +260,62 @@ export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm 
     };
   }
 
-  // Walk outward from segIdx, accumulating arc length in km until halfKm in each direction.
-  // Left walk (segIdx → 0)
-  const left = [];
-  let accum = 0;
-  for (let i = segIdx; i >= 0; i--) {
-    const [lonA, latA] = coords[i];
-    left.unshift(toLocal(lonA, latA));
-    if (i > 0) {
-      const [lonB, latB] = coords[i - 1];
-      const dx = (lonA - lonB) * 111 * cosLat;
-      const dy = (latA - latB) * 111;
-      accum += Math.hypot(dx, dy);
+  function segKm(lonA, latA, lonB, latB) {
+    const dx = (lonA - lonB) * 111 * cosLat;
+    const dy = (latA - latB) * 111;
+    return Math.hypot(dx, dy);
+  }
+
+  // Walk outward in each direction, accumulating arc length until halfKm.
+  // Record each accepted vertex's local coord and the km gap to the previous.
+  const LEFT_KM = (gapBefore, coord) => ({ gapBefore, coord });
+
+  const left = []; // ordered deepest→center; each entry has gapBefore = gap to the NEXT (more central) vertex
+  {
+    let accum = 0;
+    let prevLon = coords[segIdx][0], prevLat = coords[segIdx][1];
+    left.push(LEFT_KM(0, toLocal(prevLon, prevLat))); // segIdx itself, no gap to self
+    for (let i = segIdx - 1; i >= 0; i--) {
+      const [lonA, latA] = coords[i];
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      left.push(LEFT_KM(gap, toLocal(lonA, latA)));
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
       if (accum >= halfKm) break;
     }
+    left.reverse(); // now ordered leftmost → segIdx
   }
-  // Right walk (segIdx+1 → end)
-  const right = [];
-  accum = 0;
-  for (let i = segIdx + 1; i < coords.length; i++) {
-    const [lon, lat] = coords[i];
-    right.push(toLocal(lon, lat));
-    if (i + 1 < coords.length) {
-      const [lonN, latN] = coords[i + 1];
-      const dx = (lon - lonN) * 111 * cosLat;
-      const dy = (lat - latN) * 111;
-      accum += Math.hypot(dx, dy);
+
+  const right = []; // ordered center→right; each entry gapBefore = gap to the PREVIOUS vertex
+  {
+    let accum = 0;
+    let prevLon = coords[segIdx][0], prevLat = coords[segIdx][1];
+    for (let i = segIdx + 1; i < coords.length; i++) {
+      const [lonA, latA] = coords[i];
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      right.push({ gapBefore: gap, coord: toLocal(lonA, latA) });
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
       if (accum >= halfKm) break;
     }
   }
 
-  const points = [...left, ...right];
+  // Combine in polyline order, breaking into subpaths at gaps > BREAK_KM.
+  // Note: `left` includes segIdx as its last item with gapBefore=0, and `right`
+  // starts with the vertex after segIdx with gapBefore = segKm(segIdx, segIdx+1).
+  const sequence = [...left, ...right];
+  const subpaths = [];
+  let current = [];
+  for (const entry of sequence) {
+    if (entry.gapBefore > BREAK_KM && current.length) {
+      subpaths.push(current);
+      current = [];
+    }
+    current.push(entry.coord);
+  }
+  if (current.length) subpaths.push(current);
 
-  // Natural Earth coastlines conventionally have water on the right of the line
-  // direction. The compass renderer can override with seawardDir if needed.
-  return { points, landSide: 'right' };
+  return { subpaths, landSide: 'right' };
 }
 
 /**
