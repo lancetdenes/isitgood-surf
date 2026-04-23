@@ -6,6 +6,8 @@
  *   - reverseGeocode(lat, lon) → nearest place name
  */
 
+import { computeAdaptiveBearing, validateSeaward } from './coastline-shared.js';
+
 let coastData = null;
 let _loadPromise = null;
 
@@ -35,46 +37,6 @@ function haversine(lat1, lon1, lat2, lon2) {
             Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
             Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/** Bearing from point 1 to point 2 in degrees (0-360) */
-function bearing(lat1, lon1, lat2, lon2) {
-  const toRad = Math.PI / 180;
-  const toDeg = 180 / Math.PI;
-  const dLon = (lon2 - lon1) * toRad;
-  const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
-  const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
-            Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
-  return (Math.atan2(y, x) * toDeg + 360) % 360;
-}
-
-/**
- * Walk `distKm` from (lat, lon) along bearing `brgDeg` and return the target lat/lon.
- * Flat-earth approximation — fine for 10 km moves at any non-polar latitude.
- */
-function stepAlongBearing(lat, lon, brgDeg, distKm) {
-  const rad = brgDeg * Math.PI / 180;
-  const dLat = (distKm / 111) * Math.cos(rad);
-  const dLon = (distKm / (111 * Math.cos(lat * Math.PI / 180))) * Math.sin(rad);
-  return [lat + dLat, lon + dLon];
-}
-
-/**
- * Sample the grid at least 2 grid cells along `brgDeg` from (coastLat, coastLon).
- * Returns true if the sample is over ocean, true if no grid is provided.
- *
- * Probe distance scales with the grid's cell size (max(30 km, 2 × cell)) so
- * we reliably cross into a neighboring cell. At 0.25° GFS that's ~45 km; at
- * the 1° demo grid that's ~175 km. A fixed 10 km probe was less than one
- * cell width and effectively tested the same cell the coast point is in.
- */
-function isOcean(grid, coastLat, coastLon, brgDeg) {
-  if (!grid || typeof grid.isWet !== 'function') return true;
-  const cellKmLat = grid.dy * 111;
-  const cellKmLon = grid.dx * 111 * Math.cos(coastLat * Math.PI / 180);
-  const distKm = Math.max(30, Math.min(cellKmLat, cellKmLon) * 2);
-  const [lat, lon] = stepAlongBearing(coastLat, coastLon, brgDeg, distKm);
-  return grid.isWet(lon, lat);
 }
 
 /**
@@ -150,61 +112,14 @@ export function findNearestCoast(lat, lon, grid) {
   // seaward against the grid (flip if needed). Returns a result object plus a
   // `bothFailed` flag when neither seawardDir nor its 180° flip pointed at ocean.
   function processCandidate(cand) {
-    const coords = coastData.features[cand.featureIdx].geometry.coordinates;
-    const MAX_STEPS = 3;
-    const CORNER_THRESHOLD_DEG = 25;
-
-    function segBearing(idx) {
-      if (idx < 0 || idx >= coords.length - 1) return null;
-      const [aLon, aLat] = coords[idx];
-      const [bLon, bLat] = coords[idx + 1];
-      return bearing(aLat, aLon, bLat, bLon);
-    }
-
-    const centerBearing = segBearing(cand.segIdx);
-    const accepted = [centerBearing];
-
-    function walk(step) {
-      let localSin = Math.sin(centerBearing * Math.PI / 180);
-      let localCos = Math.cos(centerBearing * Math.PI / 180);
-      let localMean = centerBearing;
-      for (let k = 1; k <= MAX_STEPS; k++) {
-        const b = segBearing(cand.segIdx + step * k);
-        if (b == null) break;
-        const diff = Math.abs(((b - localMean + 540) % 360) - 180);
-        if (diff > CORNER_THRESHOLD_DEG) break;
-        accepted.push(b);
-        localSin += Math.sin(b * Math.PI / 180);
-        localCos += Math.cos(b * Math.PI / 180);
-        localMean = (Math.atan2(localSin, localCos) * 180 / Math.PI + 360) % 360;
-      }
-    }
-
-    walk(-1);
-    walk(1);
-
-    let finalSin = 0, finalCos = 0;
-    for (const b of accepted) {
-      finalSin += Math.sin(b * Math.PI / 180);
-      finalCos += Math.cos(b * Math.PI / 180);
-    }
-    const coastBearing = (Math.atan2(finalSin, finalCos) * 180 / Math.PI + 360) % 360;
-
-    let seawardDir = (coastBearing + 90) % 360;
-    let seawardFlipped = false;
-    let bothFailed = false;
-
-    if (grid) {
-      if (!isOcean(grid, cand.pt[0], cand.pt[1], seawardDir)) {
-        const flipped = (seawardDir + 180) % 360;
-        if (isOcean(grid, cand.pt[0], cand.pt[1], flipped)) {
-          seawardDir = flipped;
-          seawardFlipped = true;
-        } else {
-          bothFailed = true;
-        }
-      }
-    }
+    const getVertex = (f, i) => {
+      const coords = coastData.features[f].geometry.coordinates;
+      if (i < 0 || i >= coords.length) return null;
+      return coords[i];
+    };
+    const coastBearing = computeAdaptiveBearing(getVertex, cand.featureIdx, cand.segIdx);
+    const assumedSeaward = (coastBearing + 90) % 360;
+    const { seawardDir, seawardFlipped, bothFailed } = validateSeaward(grid, cand.pt[0], cand.pt[1], assumedSeaward);
 
     return {
       coastLat: cand.pt[0], coastLon: cand.pt[1],
