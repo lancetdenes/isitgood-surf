@@ -115,6 +115,8 @@ export function findNearestCoast(lat, lon) {
       coastBearing: 45,
       seawardDir: 135,
       offshoreDir: 315,
+      featureIdx: -1,
+      segIdx: -1,
     };
   }
 
@@ -149,6 +151,8 @@ export function findNearestCoast(lat, lon) {
     coastBearing,
     seawardDir,
     offshoreDir,
+    featureIdx: bestFeatureIdx,
+    segIdx: bestSegIdx,
   };
 }
 

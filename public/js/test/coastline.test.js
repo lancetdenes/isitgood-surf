@@ -22,3 +22,12 @@ test('scaffolding: synthetic straight E-W coast returns a coast bearing near 90Â
   const diff = Math.abs(((r.coastBearing - 90 + 540) % 360) - 180);
   assert.ok(diff < 5, `coastBearing ${r.coastBearing} not near 90Â° (diff=${diff})`);
 });
+
+test('findNearestCoast returns featureIdx and segIdx for the winning segment', () => {
+  _setCoastData(straightEWCoast());
+  const r = findNearestCoast(39.9, -74.5, null);
+  assert.equal(typeof r.featureIdx, 'number');
+  assert.equal(typeof r.segIdx, 'number');
+  assert.equal(r.featureIdx, 0); // only one feature in the stub
+  assert.ok(r.segIdx >= 0 && r.segIdx < 19);
+});
