@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { _setCoastData, findNearestCoast } from '../coastline.js';
+import { loadRealCoastline, loadRealSwellGrid } from './fixtures/load-real-data.js';
 
 // Synthetic "straight E-W coastline at lat=40, running west to east".
 // With Natural Earth's convention (water on the right of line direction),
@@ -176,4 +177,14 @@ test('Fix 2: retries with next-nearest coast when both directions are land', () 
   assert.ok(Math.abs(r.coastLat - 39.8) < 0.05, `coastLat ${r.coastLat} should be ~39.8 after retry`);
   const diff = Math.abs(((r.seawardDir - 180 + 540) % 360) - 180);
   assert.ok(diff < 10, `seawardDir ${r.seawardDir} not near 180° after retry`);
+});
+
+test('fixture loader: real coastline and swell grid load without error', () => {
+  const coast = loadRealCoastline();
+  assert.ok(coast.features.length > 100, 'expected many features in real coastline');
+  const grid = loadRealSwellGrid('data/demo/swell_f000.bin');
+  // Open Pacific (well offshore Hawaii) should be ocean, not null.
+  const sample = grid.interpolateSwell(-157.7, 21.3);
+  assert.ok(sample, 'open Pacific sample should not be null');
+  assert.ok(sample.height >= 0);
 });
