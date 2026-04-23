@@ -108,6 +108,94 @@ function to360(lon) { return lon < 0 ? lon + 360 : lon; }
 function to180(lon) { return lon > 180 ? lon - 360 : lon; }
 
 /**
+ * Return ~maxKm of local coastline centered on the projected coast point,
+ * projected into local kilometers. Same shape as getCoastSnippet (NE path):
+ * `{ subpaths: Array<Array<{x, y}>>, landSide }`.
+ *
+ * Breaks subpaths at vertex gaps > 5 km (defensive — rare with GSHHG).
+ *
+ * Vertex lons from the binary are in [0, 360); the caller's centerLon is in
+ * [-180, 180]. Normalize each fetched lon to the caller's convention before
+ * projecting into local km-space.
+ */
+export function getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, maxKm = 10) {
+  if (!_ready || featureIdx < 0) return { subpaths: [], landSide: 'right' };
+  const data = _data;
+  // Guard against stale indices (e.g. NE-derived indices passed in before hires loaded).
+  if (featureIdx >= data.nFeatures || segIdx >= data.featureLength(featureIdx)) {
+    return { subpaths: [], landSide: 'right' };
+  }
+
+  const halfKm = maxKm / 2;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const BREAK_KM = 5;
+
+  /** Fetch vertex [lon, lat] and normalize lon to [-180, 180]. */
+  function v(i) {
+    const [lon, lat] = data.vertex(featureIdx, i);
+    return [lon > 180 ? lon - 360 : lon, lat];
+  }
+
+  function toLocal(lon, lat) {
+    return {
+      x: (lon - centerLon) * 111 * cosLat,
+      y: (lat - centerLat) * 111,
+    };
+  }
+  function segKm(lonA, latA, lonB, latB) {
+    const dx = (lonA - lonB) * 111 * cosLat;
+    const dy = (latA - latB) * 111;
+    return Math.hypot(dx, dy);
+  }
+
+  const nVerts = data.featureLength(featureIdx);
+
+  const left = [];
+  {
+    let accum = 0;
+    let [prevLon, prevLat] = v(segIdx);
+    left.push({ gapBefore: 0, coord: toLocal(prevLon, prevLat) });
+    for (let i = segIdx - 1; i >= 0; i--) {
+      const [lonA, latA] = v(i);
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      left.push({ gapBefore: gap, coord: toLocal(lonA, latA) });
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
+      if (accum >= halfKm) break;
+    }
+    left.reverse();
+  }
+
+  const right = [];
+  {
+    let accum = 0;
+    let [prevLon, prevLat] = v(segIdx);
+    for (let i = segIdx + 1; i < nVerts; i++) {
+      const [lonA, latA] = v(i);
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      right.push({ gapBefore: gap, coord: toLocal(lonA, latA) });
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
+      if (accum >= halfKm) break;
+    }
+  }
+
+  const sequence = [...left, ...right];
+  const subpaths = [];
+  let current = [];
+  for (const entry of sequence) {
+    if (entry.gapBefore > BREAK_KM && current.length) {
+      subpaths.push(current);
+      current = [];
+    }
+    current.push(entry.coord);
+  }
+  if (current.length) subpaths.push(current);
+
+  return { subpaths, landSide: 'right' };
+}
+
+/**
  * KD-tree-backed findNearestCoast on the hires dataset.
  * Same return shape as the NE path.
  */

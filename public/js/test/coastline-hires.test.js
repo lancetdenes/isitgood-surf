@@ -27,7 +27,7 @@ test('parses real coastline-hires.bin and flips ready flag', () => {
   assert.equal(isHiresReady(), true);
 });
 
-import { findNearestCoastHires } from '../coastline-hires.js';
+import { findNearestCoastHires, getCoastSnippetHires } from '../coastline-hires.js';
 
 test('findNearestCoastHires returns a coast point near a known Rockaway click', () => {
   _resetHires();
@@ -44,4 +44,18 @@ test('findNearestCoastHires returns a coast point near a known Rockaway click', 
   assert.equal(typeof r.segIdx, 'number');
   assert.ok(Number.isFinite(r.coastBearing));
   assert.ok(Number.isFinite(r.seawardDir));
+});
+
+test('getCoastSnippetHires returns subpaths centered on the coast point', () => {
+  _resetHires();
+  const buf = readFileSync(BIN_PATH);
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  _setHiresData(parseCoastlineBinary(ab));
+  const r = findNearestCoastHires(40.585, -73.82, null);
+  const snip = getCoastSnippetHires(r.featureIdx, r.segIdx, r.coastLat, r.coastLon, 10);
+  assert.ok(snip.subpaths.length >= 1);
+  const allPts = snip.subpaths.flat();
+  assert.ok(allPts.length >= 2);
+  const maxCoord = Math.max(...allPts.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))));
+  assert.ok(maxCoord < 8, `snippet max extent ${maxCoord} km too wide`);
 });
