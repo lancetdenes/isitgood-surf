@@ -10,6 +10,7 @@ import {
   ratingBgColor, compassDir, msToMph, mToFt
 } from './ratings.js';
 import { computeForecast } from './forecast.js';
+import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
 
 // ── State ──
 
@@ -392,13 +393,58 @@ function renderCompass(size, h, coast, mini = false, bgColor = null) {
     barbs += `<line x1="${x}" y1="${endY}" x2="${x + (mini ? 10 : 6)}" y2="${endY - (mini ? 10 : 6)}" stroke="white" stroke-width="${barbW}"/>`;
   }
 
+  // Build coast representation: snippet for main compass, simple line for mini.
+  let coastSvg;
+  if (mini) {
+    coastSvg = `
+      <g transform="translate(${cx},${cy}) rotate(${cb})">
+        <path d="M 0,-${r} A ${r} ${r} 0 0 1 0,${r}" fill="rgba(56,189,248,0.04)"/>
+        <line x1="0" y1="-${r}" x2="0" y2="${r}" stroke="rgba(148,163,184,0.2)" stroke-width="4"/>
+      </g>
+    `;
+  } else {
+    const snip = getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 30);
+    if (snip.points.length >= 2) {
+      // Scale so 15 km (half-span of 30 km snippet) maps to ~r pixels.
+      const scale = r / 15;
+      const pts = snip.points.map(p => ({
+        // SVG y-axis is inverted (down = positive), but our local km y = north,
+        // so negate y to make north appear at the top of the compass.
+        sx: cx + p.x * scale,
+        sy: cy - p.y * scale,
+      }));
+      const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.sx.toFixed(1)},${p.sy.toFixed(1)}`).join(' ');
+      // Close a land polygon by extending the endpoints to the inshore side of the compass.
+      // Inshore direction = opposite of seawardDir.
+      const inshoreRad = ((coast.seawardDir + 180) % 360) * Math.PI / 180;
+      const ext = r * 2.5;
+      const ex = Math.sin(inshoreRad) * ext;
+      const ey = -Math.cos(inshoreRad) * ext;
+      const last = pts[pts.length - 1];
+      const first = pts[0];
+      const landD = `${pathD} L ${(last.sx + ex).toFixed(1)},${(last.sy + ey).toFixed(1)} L ${(first.sx + ex).toFixed(1)},${(first.sy + ey).toFixed(1)} Z`;
+      coastSvg = `
+        <defs><clipPath id="cc${size}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>
+        <g clip-path="url(#cc${size})">
+          <path d="${landD}" fill="rgba(194,140,102,0.12)" stroke="none"/>
+          <path d="${pathD}" stroke="rgba(148,163,184,0.5)" stroke-width="2" fill="none"/>
+        </g>
+      `;
+    } else {
+      // Fallback to the old line if snippet unavailable.
+      coastSvg = `
+        <g transform="translate(${cx},${cy}) rotate(${cb})">
+          <path d="M 0,-${r} A ${r} ${r} 0 0 1 0,${r}" fill="rgba(56,189,248,0.04)"/>
+          <line x1="0" y1="-${r}" x2="0" y2="${r}" stroke="rgba(148,163,184,0.2)" stroke-width="2"/>
+        </g>
+      `;
+    }
+  }
+
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${vb} ${vb}" style="flex-shrink:0">
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="${bg}" stroke="rgba(148,163,184,0.12)" stroke-width="${mini ? 3 : 1}"/>
-      <g transform="translate(${cx},${cy}) rotate(${cb})">
-        <path d="M 0,-${r} A ${r} ${r} 0 0 1 0,${r}" fill="rgba(56,189,248,0.04)"/>
-        <line x1="0" y1="-${r}" x2="0" y2="${r}" stroke="rgba(148,163,184,0.2)" stroke-width="${mini ? 4 : 2}"/>
-      </g>
+      ${coastSvg}
       ${labels}
       <g transform="translate(${cx},${cy}) rotate(${h.swellDir})">
         <rect x="${-arrowW}" y="${arrowStart}" width="${arrowW * 2}" height="${arrowH}" fill="white" opacity="${arrowOp}" rx="${mini ? 2 : 1}"/>
