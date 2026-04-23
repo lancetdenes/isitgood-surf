@@ -120,23 +120,50 @@ export function findNearestCoast(lat, lon, grid) {
     };
   }
 
-  // Compute smoothed coast bearing using multiple neighboring segments
+  // Compute smoothed coast bearing using an adaptive window that stops at corners.
+  // Each direction is walked independently: both start from the winning segment's
+  // bearing and include neighbors while they stay within 25° of the direction-local
+  // running mean. After both walks finish, the final bearing is the sin/cos average
+  // over all accepted segments (including the center once).
   const coords = coastData.features[bestFeatureIdx].geometry.coordinates;
-  const SMOOTH = 3; // use 3 points on each side
-  const startIdx = Math.max(0, bestSegIdx - SMOOTH);
-  const endIdx = Math.min(coords.length - 1, bestSegIdx + 1 + SMOOTH);
+  const MAX_STEPS = 3;
+  const CORNER_THRESHOLD_DEG = 25;
 
-  // Average bearing using sin/cos to handle wrap-around
-  let sinSum = 0, cosSum = 0;
-  for (let i = startIdx; i < endIdx; i++) {
-    const [aLon, aLat] = coords[i];
-    const [bLon, bLat] = coords[i + 1];
-    const b = bearing(aLat, aLon, bLat, bLon);
-    const rad = b * Math.PI / 180;
-    sinSum += Math.sin(rad);
-    cosSum += Math.cos(rad);
+  function segBearing(idx) {
+    if (idx < 0 || idx >= coords.length - 1) return null;
+    const [aLon, aLat] = coords[idx];
+    const [bLon, bLat] = coords[idx + 1];
+    return bearing(aLat, aLon, bLat, bLon);
   }
-  const coastBearing = (Math.atan2(sinSum, cosSum) * 180 / Math.PI + 360) % 360;
+
+  const centerBearing = segBearing(bestSegIdx);
+  const accepted = [centerBearing];
+
+  function walk(step) {
+    let localSin = Math.sin(centerBearing * Math.PI / 180);
+    let localCos = Math.cos(centerBearing * Math.PI / 180);
+    let localMean = centerBearing;
+    for (let k = 1; k <= MAX_STEPS; k++) {
+      const b = segBearing(bestSegIdx + step * k);
+      if (b == null) break;
+      const diff = Math.abs(((b - localMean + 540) % 360) - 180);
+      if (diff > CORNER_THRESHOLD_DEG) break;
+      accepted.push(b);
+      localSin += Math.sin(b * Math.PI / 180);
+      localCos += Math.cos(b * Math.PI / 180);
+      localMean = (Math.atan2(localSin, localCos) * 180 / Math.PI + 360) % 360;
+    }
+  }
+
+  walk(-1);
+  walk(1);
+
+  let finalSin = 0, finalCos = 0;
+  for (const b of accepted) {
+    finalSin += Math.sin(b * Math.PI / 180);
+    finalCos += Math.cos(b * Math.PI / 180);
+  }
+  const coastBearing = (Math.atan2(finalSin, finalCos) * 180 / Math.PI + 360) % 360;
 
   // Seaward = right perpendicular of coast line direction.
   // Natural Earth coastlines follow the convention where water is on the right
