@@ -234,6 +234,62 @@ export function findNearestCoast(lat, lon, grid) {
 }
 
 /**
+ * Return ~maxKm of local coastline centered on a segment, projected into local
+ * kilometers relative to (centerLat, centerLon). Used by the compass renderer.
+ *
+ * @returns {{ points: Array<{x: number, y: number}>, landSide: 'left'|'right' }}
+ */
+export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm = 30) {
+  if (!coastData || featureIdx < 0) return { points: [], landSide: 'right' };
+  const coords = coastData.features[featureIdx].geometry.coordinates;
+  const halfKm = maxKm / 2;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+
+  function toLocal(lon, lat) {
+    return {
+      x: (lon - centerLon) * 111 * cosLat,
+      y: (lat - centerLat) * 111,
+    };
+  }
+
+  // Walk outward from segIdx, accumulating arc length in km until halfKm in each direction.
+  // Left walk (segIdx → 0)
+  const left = [];
+  let accum = 0;
+  for (let i = segIdx; i >= 0; i--) {
+    const [lonA, latA] = coords[i];
+    left.unshift(toLocal(lonA, latA));
+    if (i > 0) {
+      const [lonB, latB] = coords[i - 1];
+      const dx = (lonA - lonB) * 111 * cosLat;
+      const dy = (latA - latB) * 111;
+      accum += Math.hypot(dx, dy);
+      if (accum >= halfKm) break;
+    }
+  }
+  // Right walk (segIdx+1 → end)
+  const right = [];
+  accum = 0;
+  for (let i = segIdx + 1; i < coords.length; i++) {
+    const [lon, lat] = coords[i];
+    right.push(toLocal(lon, lat));
+    if (i + 1 < coords.length) {
+      const [lonN, latN] = coords[i + 1];
+      const dx = (lon - lonN) * 111 * cosLat;
+      const dy = (lat - latN) * 111;
+      accum += Math.hypot(dx, dy);
+      if (accum >= halfKm) break;
+    }
+  }
+
+  const points = [...left, ...right];
+
+  // Natural Earth coastlines conventionally have water on the right of the line
+  // direction. The compass renderer can override with seawardDir if needed.
+  return { points, landSide: 'right' };
+}
+
+/**
  * Reverse geocode a lat/lon to the nearest place name.
  * Uses OpenStreetMap Nominatim (free, no API key needed).
  */

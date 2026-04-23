@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { _setCoastData, findNearestCoast } from '../coastline.js';
+import { _setCoastData, findNearestCoast, getCoastSnippet } from '../coastline.js';
 import { loadRealCoastline, loadRealSwellGrid } from './fixtures/load-real-data.js';
 
 // Synthetic "straight E-W coastline at lat=40, running west to east".
@@ -229,4 +229,20 @@ test('real-world fixtures return seaward directions within tolerance', () => {
   }
   if (skipped.length) console.log('  Skipped (data-limited):', skipped.join('; '));
   assert.equal(failures.length, 0, failures.join('\n  '));
+});
+
+test('getCoastSnippet returns projected points around a segment, in km', () => {
+  _setCoastData(straightEWCoast());
+  const r = findNearestCoast(39.9, -74.5, null);
+  const snip = getCoastSnippet(r.featureIdx, r.segIdx, r.coastLat, r.coastLon, 30);
+  assert.ok(snip.points.length >= 2);
+  // Origin should be near the coast point.
+  const dists = snip.points.map(p => Math.hypot(p.x, p.y));
+  assert.ok(Math.min(...dists) < 2, 'one point should be near the origin');
+  // For a 30km snippet around a straight coast, vertices should be within ~20km
+  // of the center (each side walks up to ~15km).
+  const maxCoord = Math.max(...snip.points.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))));
+  assert.ok(maxCoord < 20, `snippet max extent ${maxCoord} km should be ~15`);
+  // landSide should be 'left' or 'right'
+  assert.ok(snip.landSide === 'left' || snip.landSide === 'right');
 });
