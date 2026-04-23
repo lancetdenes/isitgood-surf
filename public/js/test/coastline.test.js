@@ -114,3 +114,26 @@ test('Fix 2: seaward direction is validated against grid (happy path, no flip)',
   assert.ok(diff < 5, `seawardDir ${r.seawardDir} not near 180° (diff=${diff})`);
   assert.equal(r.seawardFlipped, false);
 });
+
+// Coastline running east-to-west (reverse of straightEWCoast).
+// With the "+90° = seaward" rule that means seaward points NORTH,
+// but we set up the stub grid so north is land — the flip should kick in.
+function reversedEWCoast() {
+  const coords = [];
+  for (let i = 0; i < 20; i++) coords.push([-75 + (19 - i) * 0.1, 40]); // east→west
+  return {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } }],
+  };
+}
+
+test('Fix 2: detects and corrects a winding flip', () => {
+  _setCoastData(reversedEWCoast());
+  // southOceanGrid: south=ocean, north=land (uses interpolateSwell).
+  // Raw +90° rule on east→west line points north (land) — bad.
+  // Flip should give 180° (south=ocean).
+  const r = findNearestCoast(39.9, -74.5, southOceanGrid());
+  const diff = Math.abs(((r.seawardDir - 180 + 540) % 360) - 180);
+  assert.ok(diff < 5, `seawardDir ${r.seawardDir} not corrected to 180° (diff=${diff})`);
+  assert.equal(r.seawardFlipped, true);
+});
