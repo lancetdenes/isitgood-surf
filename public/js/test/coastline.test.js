@@ -76,7 +76,7 @@ function gentleCurveCoast() {
   };
 }
 
-test('Fix 2: gentle curve produces symmetric bearing (no walk-order contamination)', () => {
+test('Fix 1: gentle curve produces symmetric bearing (no walk-order contamination)', () => {
   _setCoastData(gentleCurveCoast());
   // Click offshore of a mid-curve point. Bearing should reflect the LOCAL coast
   // direction at that point, not be biased by one side of the curve.

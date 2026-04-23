@@ -403,6 +403,7 @@ function renderCompass(size, h, coast, mini = false, bgColor = null) {
       </g>
     `;
   } else {
+    const clipId = `cc-${size}-${Math.random().toString(36).slice(2, 8)}`;
     const snip = getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 30);
     if (snip.points.length >= 2) {
       // Scale so 15 km (half-span of 30 km snippet) maps to ~r pixels.
@@ -424,8 +425,8 @@ function renderCompass(size, h, coast, mini = false, bgColor = null) {
       const first = pts[0];
       const landD = `${pathD} L ${(last.sx + ex).toFixed(1)},${(last.sy + ey).toFixed(1)} L ${(first.sx + ex).toFixed(1)},${(first.sy + ey).toFixed(1)} Z`;
       coastSvg = `
-        <defs><clipPath id="cc${size}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>
-        <g clip-path="url(#cc${size})">
+        <defs><clipPath id="${clipId}"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath></defs>
+        <g clip-path="url(#${clipId})">
           <path d="${landD}" fill="rgba(194,140,102,0.12)" stroke="none"/>
           <path d="${pathD}" stroke="rgba(148,163,184,0.5)" stroke-width="2" fill="none"/>
         </g>

@@ -228,6 +228,8 @@ export function findNearestCoast(lat, lon, grid) {
     if (!res.bothFailed) break;
   }
 
+  // candidates was non-empty (guarded above), so the retry loop ran at least
+  // once and lastResult is guaranteed set here.
   if (lastResult.bothFailed) lastResult.unreliableBearing = true;
   delete lastResult.bothFailed;
   return lastResult;
