@@ -18,11 +18,11 @@
   },
   "dependencies": {
     "compression": "^1.8.1",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "kdbush": "^4.0.2"
   },
   "devDependencies": {
     "@turf/boolean-point-in-polygon": "^7.3.5",
-    "@turf/helpers": "^7.3.5",
-    "kdbush": "^4.0.2"
+    "@turf/helpers": "^7.3.5"
   }
 }
