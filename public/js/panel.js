@@ -95,6 +95,13 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     const effectiveCoast = data.coast || coast;
 
     const hours = data.hours.map(raw => {
+      // Wave power per unit crest length (deep-water approximation).
+      // P = (ρ g² / 64π) × H² × T  ≈  0.49 × H² × T  kW/m   (H in m, T in s)
+      // This captures the "how much surf is actually showing up" quantity that
+      // height alone misses: a clean long-period swell packs more energy than
+      // a fatter short-period wave. Used below to size the 7-day bar.
+      const surfPower = 0.49 * raw.swellHeightM * raw.swellHeightM * raw.swellPeriod;
+
       const entry = {
         hour: raw.hour,
         time: runTime
@@ -105,6 +112,7 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
         swellHeightFt: mToFt(raw.swellHeightM),
         swellDir: raw.swellDir,
         swellPeriod: raw.swellPeriod,
+        surfPower,
         swellRating: null, windRating: null, overallRating: null,
       };
 
@@ -283,10 +291,15 @@ function renderDaily(days, coast) {
     const noon = day.hours[Math.floor(day.hours.length / 2)] || am;
     const pm = day.hours[day.hours.length - 1] || am;
 
-    // Average score for bar
+    // Bar magnitude = peak wave power over the day (the best window, not the
+    // average) with a sqrt curve so the low end reads more honestly. Ceiling
+    // at 100 kW/m, which lines up with big-wave days (e.g. 10 ft @ 18 s).
+    // Color still comes from the avg overall rating so wind/direction affect it.
     const avgScore = day.hours.reduce((s, h) => s + h.overallRating.score, 0) / day.hours.length;
+    const peakPower = day.hours.reduce((m, h) => Math.max(m, h.surfPower), 0);
     const { color } = overallRating(avgScore);
-    const barWidth = Math.max(5, (avgScore / 10) * 100);
+    const POWER_CEILING = 100; // kW/m
+    const barWidth = Math.max(5, Math.sqrt(Math.min(1, peakPower / POWER_CEILING)) * 100);
 
     // Best swell stats for the day
     const bestSwell = day.hours.reduce((best, h) => h.swellHeightFt > best.swellHeightFt ? h : best, day.hours[0]);

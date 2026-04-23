@@ -315,7 +315,7 @@ async function onRowClick(la, ln, peakHour) {
   try {
     await loadCoastline();
   } catch (e) { /* coastline is best-effort; panel works without it */ }
-  const coast = findNearestCoast(la, ln);
+  const coast = findNearestCoast(la, ln, _appRef?.windGrid);
   const geocodePromise = reverseGeocode(la, ln);
   await openPanel(la, ln, coast, _appRef.dataPath, _appRef.runTime, _appRef.hour,
                   (url) => _appRef._cachedLoadGrid(url));

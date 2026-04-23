@@ -2,7 +2,7 @@
  * coastline.js — Coastline detection, bearing computation, reverse geocoding
  *
  * Loads a bundled Natural Earth coastline GeoJSON and provides:
- *   - findNearestCoast(lat, lon) → nearest coastline point + orientation
+ *   - findNearestCoast(lat, lon, grid) → nearest coastline point + orientation
  *   - reverseGeocode(lat, lon) → nearest place name
  */
 
@@ -73,7 +73,7 @@ function projectOntoSegment(pLon, pLat, aLon, aLat, bLon, bLat) {
  *   - Smooths bearing over multiple neighboring points
  *   - Determines seaward direction using coastline winding order
  */
-export function findNearestCoast(lat, lon) {
+export function findNearestCoast(lat, lon, grid) {
   if (!coastData) throw new Error('Coastline not loaded');
 
   let bestDist = Infinity;
