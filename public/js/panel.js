@@ -184,6 +184,9 @@ function render() {
     ${renderSelectedDetail(selHour, coast)}
     ${renderHourly(selDay, coast)}
     ${renderDaily(days, coast)}
+    <div style="font-size: 10px; color: rgba(148,163,184,0.5); margin-top: 12px; text-align: right; padding-right: 4px;">
+      Coast: GSHHG &bull; Weather: NOAA GFS
+    </div>
   `;
 
   // Wire up click handlers
