@@ -7,6 +7,7 @@
  */
 
 import { computeAdaptiveBearing, validateSeaward } from './coastline-shared.js';
+import { isHiresReady, findNearestCoastHires, getCoastSnippetHires } from './coastline-hires.js';
 
 let coastData = null;
 let _loadPromise = null;
@@ -64,7 +65,7 @@ function projectOntoSegment(pLon, pLat, aLon, aLat, bLon, bLat) {
  *   - Smooths bearing over multiple neighboring points
  *   - Determines seaward direction using coastline winding order
  */
-export function findNearestCoast(lat, lon, grid) {
+function findNearestCoastNE(lat, lon, grid) {
   if (!coastData) throw new Error('Coastline not loaded');
 
   const TOP_N = 5;
@@ -161,7 +162,7 @@ export function findNearestCoast(lat, lon, grid) {
  *
  * @returns {{ subpaths: Array<Array<{x: number, y: number}>>, landSide: 'left'|'right' }}
  */
-export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm = 10) {
+function getCoastSnippetNE(featureIdx, segIdx, centerLat, centerLon, maxKm = 10) {
   if (!coastData || featureIdx < 0) return { subpaths: [], landSide: 'right' };
   const coords = coastData.features[featureIdx].geometry.coordinates;
   const halfKm = maxKm / 2;
@@ -231,6 +232,18 @@ export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm 
   if (current.length) subpaths.push(current);
 
   return { subpaths, landSide: 'right' };
+}
+
+/** Public: find nearest coast. Delegates to hires when available. */
+export function findNearestCoast(lat, lon, grid) {
+  if (isHiresReady()) return findNearestCoastHires(lat, lon, grid);
+  return findNearestCoastNE(lat, lon, grid);
+}
+
+/** Public: get coast snippet. Delegates to hires when available. */
+export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm) {
+  if (isHiresReady()) return getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, maxKm);
+  return getCoastSnippetNE(featureIdx, segIdx, centerLat, centerLon, maxKm);
 }
 
 /**
