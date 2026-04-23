@@ -16,6 +16,7 @@ let KDBushCtor = null;
 let _data = null;      // parsed binary (see parseCoastlineBinary)
 let _index = null;     // KDBush over segment midpoints
 let _ready = false;
+let _loadPromise = null;
 
 /** Inject the KDBush constructor. Must be called before _setHiresData / loadHiresCoastline. */
 export function setKDBush(ctor) {
@@ -25,6 +26,7 @@ export function setKDBush(ctor) {
 // --- Test hooks ---
 export function _resetHires() {
   _data = null; _index = null; _ready = false;
+  _loadPromise = null;
 }
 export function _setHiresData(data) {
   if (!KDBushCtor) throw new Error('setKDBush must be called before loading hires data');
@@ -66,13 +68,21 @@ function buildIndex(data) {
   return idx;
 }
 
-/** Load the hires binary and flip ready. Returns a promise. */
+/** Load the hires binary and flip ready. Idempotent — concurrent callers share one fetch. */
 export async function loadHiresCoastline(url = '/assets/coastline-hires.bin') {
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Failed to load ${url}: ${resp.status}`);
-  const ab = await resp.arrayBuffer();
-  const data = parseCoastlineBinary(ab);
-  _setHiresData(data);
+  if (_ready) return;
+  if (_loadPromise) return _loadPromise;
+  _loadPromise = (async () => {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      _loadPromise = null; // allow retry after failure
+      throw new Error(`Failed to load ${url}: ${resp.status}`);
+    }
+    const ab = await resp.arrayBuffer();
+    const data = parseCoastlineBinary(ab);
+    _setHiresData(data);
+  })();
+  return _loadPromise;
 }
 
 /** Internal accessor for downstream lookup modules (Tasks 8+). */
