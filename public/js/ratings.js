@@ -69,42 +69,47 @@ export function compassDir(deg) {
 
 /**
  * Rate swell quality (0-10).
- * @param {number} heightFt - wave height in feet
- * @param {number} periodS - swell period in seconds
+ *
+ * Physics-based rather than the old bucketed additive scoring. Two inputs:
+ *   1. Wave power per unit crest (deep-water): P = 0.49 × H² × T  kW/m.
+ *      Captures the "how much surf actually shows up" quantity — pairs height
+ *      and period multiplicatively the way energy flux really works.
+ *   2. Direction alignment with the seaward direction. Smooth falloff; energy
+ *      reaching the coast drops roughly as (dirDiff/100°)^1.5 and zeroes out
+ *      past ~105° since the swell is then heading away from land.
+ *
+ * Calibration anchors (on-axis, clean):
+ *     3 ft @ 10 s  →  ~4.2   Fair
+ *     5 ft @ 12 s  →  ~6.2   Fair–Good
+ *     7 ft @ 14 s  →  ~7.5   Good
+ *    10 ft @ 16 s  →  ~8.8   Epic
+ *    15 ft @ 20 s  →  10     Epic (clamped)
+ *
+ * @param {number} heightFt - significant wave height in feet
+ * @param {number} periodS - peak period in seconds
  * @param {number} swellDir - swell direction (degrees, where it comes FROM)
- * @param {number} optimalDir - optimal swell direction for this coast (seaward direction)
+ * @param {number} optimalDir - seaward direction of the coast (ideal swell source)
  * @returns {{ score: number, label: string, color: string }}
  */
 export function rateSwell(heightFt, periodS, swellDir, optimalDir) {
-  if (heightFt < 0.5) return { score: 0, ...subRating(0) };
+  if (heightFt < 0.5 || periodS < 3) return { score: 0, ...subRating(0) };
 
-  // Height score
-  let hScore;
-  if (heightFt >= 8) hScore = 4;
-  else if (heightFt >= 5) hScore = 3;
-  else if (heightFt >= 3) hScore = 2.2;
-  else if (heightFt >= 2) hScore = 1.5;
-  else if (heightFt >= 1) hScore = 0.7;
-  else hScore = 0.3;
+  // Wave power in kW/m — formula expects meters, we store feet in the UI.
+  const heightM = heightFt / 3.281;
+  const power = 0.49 * heightM * heightM * periodS;
 
-  // Period score
-  let pScore;
-  if (periodS >= 14) pScore = 3;
-  else if (periodS >= 11) pScore = 2.2;
-  else if (periodS >= 9) pScore = 1.5;
-  else if (periodS >= 7) pScore = 0.8;
-  else pScore = 0.3;
+  // Log curve tuned so "small fun" lands around 4 and "pumping" around 7-8.
+  // `1 + 2*power` keeps low-end flat days near zero; the 4× scales to ~10.
+  const powerScore = 4 * Math.log10(1 + 2 * power);
 
-  // Direction match score
+  // Direction factor: 1 on-axis, ~0.54 at 60°, ~0.15 at 90°, 0 past ~105°.
+  // 105° cutoff reflects that swell coming from more than a right angle off
+  // the seaward bearing is physically obstructed by the land.
   const dirDiff = Math.abs(angDiff(swellDir, optimalDir));
-  let dScore;
-  if (dirDiff <= 20) dScore = 3;
-  else if (dirDiff <= 40) dScore = 2.2;
-  else if (dirDiff <= 60) dScore = 1.5;
-  else if (dirDiff <= 90) dScore = 0.8;
-  else dScore = 0.2;
+  const dirFactor = dirDiff >= 105 ? 0
+    : Math.max(0, 1 - Math.pow(dirDiff / 100, 1.5));
 
-  const score = hScore + pScore + dScore;
+  const score = Math.min(10, powerScore * dirFactor);
   return { score, ...subRating(score) };
 }
 
