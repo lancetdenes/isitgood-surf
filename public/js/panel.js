@@ -95,6 +95,10 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     const effectiveCoast = data.coast || coast;
 
     const hours = data.hours.map(raw => {
+      // Wave power per unit crest length, deep-water approximation:
+      // P = (ρg²/64π) × H² × T  ≈  0.49 × H² × T  kW/m   (H in m, T in s)
+      const surfPower = 0.49 * raw.swellHeightM * raw.swellHeightM * raw.swellPeriod;
+
       const entry = {
         hour: raw.hour,
         time: runTime
@@ -105,6 +109,7 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
         swellHeightFt: mToFt(raw.swellHeightM),
         swellDir: raw.swellDir,
         swellPeriod: raw.swellPeriod,
+        surfPower,
         swellRating: null, windRating: null, overallRating: null,
       };
 
@@ -233,6 +238,11 @@ function renderSelectedDetail(h, coast) {
           <span class="rp-detail-sub">${h.swellPeriod.toFixed(0)}s · ${compassDir(h.swellDir)}</span>
         </div>
         <div class="rp-detail-row">
+          <span class="rp-detail-label">Energy</span>
+          <span class="rp-detail-val">${h.surfPower.toFixed(1)}</span><span class="rp-detail-unit">kW/m</span>
+          <span class="rp-detail-sub">${h.swellRating.label}</span>
+        </div>
+        <div class="rp-detail-row">
           <span class="rp-detail-label">Wind</span>
           <span class="rp-detail-val">${h.windSpeedMph.toFixed(0)}</span><span class="rp-detail-unit">mph</span>
           <span class="rp-detail-sub">${compassDir(h.windDir)} · ${windLabel}</span>
@@ -283,10 +293,15 @@ function renderDaily(days, coast) {
     const noon = day.hours[Math.floor(day.hours.length / 2)] || am;
     const pm = day.hours[day.hours.length - 1] || am;
 
-    // Average score for bar
+    // Bar length = peak wave power for the day (best window, sqrt-curved so
+    // small surf still reads), ceiling 100 kW/m (≈ 10 ft @ 16 s territory).
+    // Color = overall rating (factors in wind), so a powerful but onshore day
+    // shows a long but muted bar.
     const avgScore = day.hours.reduce((s, h) => s + h.overallRating.score, 0) / day.hours.length;
+    const peakPower = day.hours.reduce((m, h) => Math.max(m, h.surfPower), 0);
     const { color } = overallRating(avgScore);
-    const barWidth = Math.max(5, (avgScore / 10) * 100);
+    const POWER_CEILING = 100; // kW/m
+    const barWidth = Math.max(5, Math.sqrt(Math.min(1, peakPower / POWER_CEILING)) * 100);
 
     // Best swell stats for the day
     const bestSwell = day.hours.reduce((best, h) => h.swellHeightFt > best.swellHeightFt ? h : best, day.hours[0]);
