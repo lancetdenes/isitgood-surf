@@ -118,19 +118,26 @@ function to360(lon) { return lon < 0 ? lon + 360 : lon; }
 function to180(lon) { return lon > 180 ? lon - 360 : lon; }
 
 /**
- * idx.within() that handles antimeridian wraparound. When `lon360` is within
- * `radius` of 0 or 360, also queries the wrap-around longitude and merges
- * results. Returns a deduplicated array of point indices.
+ * Axis-aligned-box query that scales the lon radius by 1/cos(lat) so high-
+ * latitude clicks get the same E-W km coverage as N-S. Caps lon radius at
+ * 5° to avoid degeneracy near the poles. Also handles antimeridian
+ * wraparound when the box straddles 0°/360° in the binary's lon space.
+ *
+ * @returns {number[]} deduplicated kdbush point indices
  */
-function queryWrap(idx, lon360, lat, radius) {
-  const main = idx.within(lon360, lat, radius);
-  if (lon360 < radius) {
-    const wrap = idx.within(lon360 + 360, lat, radius);
-    return Array.from(new Set([...main, ...wrap]));
+function queryBox(idx, lon360, lat, baseRadius) {
+  const cosLat = Math.max(0.1, Math.cos(lat * Math.PI / 180));
+  const lonR = Math.min(5, baseRadius / cosLat);
+  const latR = baseRadius;
+
+  const rangeFor = (lonCenter) => idx.range(lonCenter - lonR, lat - latR, lonCenter + lonR, lat + latR);
+
+  const main = rangeFor(lon360);
+  if (lon360 < lonR) {
+    return Array.from(new Set([...main, ...rangeFor(lon360 + 360)]));
   }
-  if (lon360 > 360 - radius) {
-    const wrap = idx.within(lon360 - 360, lat, radius);
-    return Array.from(new Set([...main, ...wrap]));
+  if (lon360 > 360 - lonR) {
+    return Array.from(new Set([...main, ...rangeFor(lon360 - 360)]));
   }
   return main;
 }
@@ -244,10 +251,11 @@ export function findNearestCoastHires(lat, lon, grid) {
   // The binary stores longitudes in 0-360; convert the query lon accordingly.
   const lon360 = to360(lon);
 
-  // Query kdbush for candidate segment indices within the search radius.
-  // queryWrap handles antimeridian wraparound near 0°/360° in the binary's
-  // 0-360 longitude space.
-  const candIndices = queryWrap(idx, lon360, lat, SEARCH_RADIUS_DEG);
+  // Query kdbush via a lat-aware axis-aligned box. queryBox scales lon
+  // radius by 1/cos(lat) so high-latitude clicks get the same km coverage
+  // E-W as N-S, and handles antimeridian wraparound when the box straddles
+  // 0°/360° in the binary's lon space.
+  const candIndices = queryBox(idx, lon360, lat, SEARCH_RADIUS_DEG);
   if (candIndices.length === 0) {
     return {
       coastLat: lat, coastLon: lon, distance: Infinity,
