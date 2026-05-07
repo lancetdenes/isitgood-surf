@@ -60,6 +60,8 @@ function scoreWind(mph, windDir, offshoreDir) {
 }
 
 function scoreSpot(spot, windGrid, swellGrid) {
+  // Spots whose offshoreDir couldn't be reliably determined at build time
+  // are excluded from the ranking rather than rated against a sentinel.
   if (spot.o == null) return null;
   const w = windGrid?.interpolate?.(spot.ln, spot.la);
   const s = swellGrid?.interpolate?.(spot.ln, spot.la);

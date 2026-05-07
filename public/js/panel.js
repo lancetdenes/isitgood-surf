@@ -118,9 +118,20 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
         swellRating: null, windRating: null, overallRating: null,
       };
 
-      entry.swellRating = rateSwell(entry.swellHeightFt, entry.swellPeriod, entry.swellDir, effectiveCoast.seawardDir);
-      entry.windRating = rateWind(entry.windSpeedMph, entry.windDir, effectiveCoast.offshoreDir);
-      entry.overallRating = rateOverall(entry.swellRating, entry.windRating);
+      // When the coastline lookup couldn't reliably determine a bearing
+      // (no candidate in range, or both seaward dirs failed wet-test) we
+      // skip rating rather than render a sentinel-derived score.
+      const reliable = effectiveCoast && !effectiveCoast.unreliableBearing;
+      if (reliable) {
+        entry.swellRating = rateSwell(entry.swellHeightFt, entry.swellPeriod, entry.swellDir, effectiveCoast.seawardDir);
+        entry.windRating = rateWind(entry.windSpeedMph, entry.windDir, effectiveCoast.offshoreDir);
+        entry.overallRating = rateOverall(entry.swellRating, entry.windRating);
+      } else {
+        const flat = { score: null, label: '—', color: '#64748b' };
+        entry.swellRating = { ...flat };
+        entry.windRating = { ...flat, desc: 'coast unknown' };
+        entry.overallRating = { ...flat, desc: 'coast unknown' };
+      }
 
       return entry;
     });
@@ -219,12 +230,13 @@ function renderHeader(lat, lon) {
 }
 
 function renderOverall(or) {
+  const scoreText = or.score == null ? '—' : or.score.toFixed(1);
   return `
     <div class="rp-overall">
-      <div class="rp-score" style="background:${or.color}">${or.score.toFixed(1)}</div>
+      <div class="rp-score" style="background:${or.color}">${scoreText}</div>
       <div>
         <div class="rp-rating-label" style="color:${or.color}">${or.label}</div>
-        <div class="rp-rating-desc">${or.desc}</div>
+        <div class="rp-rating-desc">${or.desc || ''}</div>
       </div>
     </div>
   `;
