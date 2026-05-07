@@ -15,6 +15,11 @@ import { renderCompass } from '../../public/js/compass-render.js';
 const SYNTH_HOUR = { swellHeightFt: 4, windSpeedMph: 8, swellDir: 200, windDir: 60 };
 
 export function renderFixture(fixture) {
+  // Production passes a real GFS swell grid for validateSeaward to flip the
+  // bearing+90 default when it points at land. The harness has no grid, so
+  // small-island and indented-coast fixtures with ambiguous coastline
+  // winding will get whichever side the winding implies. Fixtures whose
+  // expected seaward depends on grid validation are marked tol: null.
   const coast = findNearestCoastHires(fixture.lat, fixture.lon, null);
   const checks = checkFixture(fixture, coast);
 
