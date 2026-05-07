@@ -1,0 +1,105 @@
+
+> crowdsurf-v3@3.0.0 test:hires
+> node --test 'public/js/test/coastline-hires.test.js' 'public/js/test/coastline-fixtures.test.js'
+
+  Skipped (tol=null): Pipeline HI, Malibu First Point
+✖ findNearestCoastHires: every fixture finds a coast within 5 km (266.101417ms)
+✖ getCoastSnippetHires: snippet has at least 6 vertices and 6km spread (247.015292ms)
+✔ getCoastSnippetHires: at most two subpaths per fixture (215.280833ms)
+✖ seawardDir matches expected within fixture tolerance (209.272625ms)
+  Skipped (data-limited): Pipeline, Oahu (point smoothed by GSHHG-h): got 315.9°; Malibu First Point (point smoothed by GSHHG-h): got 138.0°
+✔ isHiresReady is false before _setHiresData (0.730583ms)
+✔ parses real coastline-hires.bin and flips ready flag (268.646416ms)
+✔ findNearestCoastHires returns a coast point near a known Rockaway click (241.867083ms)
+✔ getCoastSnippetHires returns subpaths centered on the coast point (222.006208ms)
+✔ hires fixtures return tight seaward tolerances (no grid required) (208.7295ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 6
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1040.410917
+
+✖ failing tests:
+
+test at public/js/test/coastline-fixtures.test.js:40:1
+✖ findNearestCoastHires: every fixture finds a coast within 5 km (266.101417ms)
+  AssertionError [ERR_ASSERTION]: 
+    Bella Coola BC: nearest coast 18.70 km > 5 km tolerance
+    Mauritania: nearest coast 6.28 km > 5 km tolerance
+    Ninety Mile Beach AU: nearest coast 5.24 km > 5 km tolerance
+  
+  3 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/lancetdenes/code/surf_app/surf_app_V3/public/js/test/coastline-fixtures.test.js:56:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.start (node:internal/test_runner/test:1096:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at public/js/test/coastline-fixtures.test.js:59:1
+✖ getCoastSnippetHires: snippet has at least 6 vertices and 6km spread (247.015292ms)
+  AssertionError [ERR_ASSERTION]: 
+    Rockaway Beach NY: snippet has only 5 vertices
+    Ocean Beach SF: snippet has only 5 vertices
+    Outer Banks NC: snippet has only 3 vertices
+    Ninety Mile Beach AU: snippet has only 3 vertices
+  
+  4 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/lancetdenes/code/surf_app/surf_app_V3/public/js/test/coastline-fixtures.test.js:71:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 4,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at public/js/test/coastline-fixtures.test.js:88:1
+✖ seawardDir matches expected within fixture tolerance (209.272625ms)
+  AssertionError [ERR_ASSERTION]: 
+    Suva Fiji: seaward 299.6° vs expected 180° (diff 119.6° > ±30°)
+    Apia Samoa: seaward 19.6° vs expected 180° (diff 160.4° > ±30°)
+    Adak Aleutians: seaward 101.9° vs expected 180° (diff 78.1° > ±30°)
+    Tromso Norway: seaward 121.4° vs expected 0° (diff 121.4° > ±45°)
+    Pacifica CA: seaward 308.6° vs expected 270° (diff 38.6° > ±30°)
+    Sydney N. Beaches: seaward 24.1° vs expected 90° (diff 65.9° > ±30°)
+    Mauritania: seaward 301.0° vs expected 270° (diff 31.0° > ±25°)
+    Ninety Mile Beach AU: seaward 137.4° vs expected 180° (diff 42.6° > ±25°)
+    Dakhla EH: seaward 112.6° vs expected 270° (diff 157.4° > ±45°)
+  
+  9 !== 0
+  
+      at TestContext.<anonymous> (file:///Users/lancetdenes/code/surf_app/surf_app_V3/public/js/test/coastline-fixtures.test.js:101:10)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1201:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+      at Test.postRun (node:internal/test_runner/test:1330:19)
+      at Test.run (node:internal/test_runner/test:1258:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:831:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 9,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
