@@ -78,7 +78,10 @@ function scoreSpot(spot, windGrid, swellGrid) {
   const swDir = swellGrid.arrays ? interpolateSwellDir(swellGrid, spot.ln, spot.la) : s[1];
 
   // Optimal swell approaches from opposite of offshore (waves from sea).
-  const optimalSwell = (spot.o + 180) % 360;
+  // GSHHG-built spots carry an explicit `sw` field; legacy NE-built spots
+  // derive it from offshore. Same value, but `sw` avoids the round-trip
+  // when the build pipeline computed it directly from coast bearing.
+  const optimalSwell = spot.sw != null ? spot.sw : (spot.o + 180) % 360;
   const sw = scoreSwell(swHeightFt, swPeriod, swDir, optimalSwell);
   const wi = scoreWind(windMph, windDir, spot.o);
   const overall = sw * 0.6 + wi * 0.4;
