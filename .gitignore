@@ -21,3 +21,7 @@ data/reference/*
 .env
 .env.local
 .vercel
+
+# Coastline harness snapshots (regenerable PNGs + summaries)
+test/snapshots/*/
+!test/snapshots/.gitkeep
