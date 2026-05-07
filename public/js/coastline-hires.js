@@ -118,6 +118,24 @@ function to360(lon) { return lon < 0 ? lon + 360 : lon; }
 function to180(lon) { return lon > 180 ? lon - 360 : lon; }
 
 /**
+ * idx.within() that handles antimeridian wraparound. When `lon360` is within
+ * `radius` of 0 or 360, also queries the wrap-around longitude and merges
+ * results. Returns a deduplicated array of point indices.
+ */
+function queryWrap(idx, lon360, lat, radius) {
+  const main = idx.within(lon360, lat, radius);
+  if (lon360 < radius) {
+    const wrap = idx.within(lon360 + 360, lat, radius);
+    return Array.from(new Set([...main, ...wrap]));
+  }
+  if (lon360 > 360 - radius) {
+    const wrap = idx.within(lon360 - 360, lat, radius);
+    return Array.from(new Set([...main, ...wrap]));
+  }
+  return main;
+}
+
+/**
  * Return ~maxKm of local coastline centered on the projected coast point,
  * projected into local kilometers. Same shape as getCoastSnippet (NE path):
  * `{ subpaths: Array<Array<{x, y}>>, landSide }`.
@@ -140,10 +158,17 @@ export function getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, m
   const cosLat = Math.cos(centerLat * Math.PI / 180);
   const BREAK_KM = 20;
 
-  /** Fetch vertex [lon, lat] and normalize lon to [-180, 180]. */
+  /**
+   * Fetch vertex [lon, lat], normalize to [-180, 180], then unwrap relative
+   * to centerLon so antimeridian-spanning snippets project to a contiguous
+   * local-km region instead of wrapping ~40,000 km across the world.
+   */
   function v(i) {
-    const [lon, lat] = data.vertex(featureIdx, i);
-    return [lon > 180 ? lon - 360 : lon, lat];
+    let [lon, lat] = data.vertex(featureIdx, i);
+    if (lon > 180) lon -= 360;
+    if (lon - centerLon > 180) lon -= 360;
+    else if (lon - centerLon < -180) lon += 360;
+    return [lon, lat];
   }
 
   function toLocal(lon, lat) {
@@ -220,7 +245,9 @@ export function findNearestCoastHires(lat, lon, grid) {
   const lon360 = to360(lon);
 
   // Query kdbush for candidate segment indices within the search radius.
-  const candIndices = idx.within(lon360, lat, SEARCH_RADIUS_DEG);
+  // queryWrap handles antimeridian wraparound near 0°/360° in the binary's
+  // 0-360 longitude space.
+  const candIndices = queryWrap(idx, lon360, lat, SEARCH_RADIUS_DEG);
   if (candIndices.length === 0) {
     return {
       coastLat: lat, coastLon: lon, distance: Infinity,
