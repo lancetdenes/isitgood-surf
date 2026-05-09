@@ -25,7 +25,8 @@ export function renderFixture(fixture) {
 
   let snip = null;
   if (coast && coast.featureIdx >= 0) {
-    snip = getCoastSnippetHires(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 10);
+    // Match panel.js — 6 km snippet to keep features central in the compass.
+    snip = getCoastSnippetHires(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 6);
   }
 
   const safeCoast = coast || { coastBearing: 0 };

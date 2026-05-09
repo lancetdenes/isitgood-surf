@@ -359,6 +359,10 @@ function renderDaily(days, coast) {
  * callers don't have to.
  */
 function renderCompass(size, h, coast, mini = false, bgColor = null) {
-  const snip = mini ? null : getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 10);
+  // 6 km snippet — wider gives a too-zoomed-out view where real local
+  // features (points, bays, jetties) get smoothed away inside the compass
+  // circle. compass-render.js scales the half-span (3 km) to 75% of r so
+  // the snippet sits well inside the bezel even when it runs diagonally.
+  const snip = mini ? null : getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 6);
   return renderCompassSvg(size, h, coast, snip, mini, bgColor);
 }

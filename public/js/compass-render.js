@@ -60,15 +60,29 @@ export function renderCompass(size, h, coast, snip, mini = false, bgColor = null
       </g>
     `;
   } else if (snip && snip.subpaths.length) {
-    const scale = r / 5;
+    // Adaptive scale: measure the snippet's actual bounding-box radius from
+    // its centroid and scale so the bbox fits within 70% of the compass
+    // radius. A short straight beach, a tight headland, and a long fjord
+    // all end up the same visual size — the local SHAPE is what matters,
+    // not the absolute km extent. Also keeps the line from touching the
+    // bezel on both sides (which made the compass feel "stretched").
+    let cxKm = 0, cyKm = 0, n = 0;
+    for (const sub of snip.subpaths) for (const p of sub) { cxKm += p.x; cyKm += p.y; n++; }
+    cxKm /= n; cyKm /= n;
+    let maxR = 0;
+    for (const sub of snip.subpaths) for (const p of sub) {
+      const d = Math.hypot(p.x - cxKm, p.y - cyKm);
+      if (d > maxR) maxR = d;
+    }
+    const scale = maxR > 0.5 ? (r * 0.7) / maxR : r * 0.7 / 2; // sane default for tiny snippets
     const paths = snip.subpaths.map(sub => {
       return sub.map((p, i) => {
-        const sx = cx + p.x * scale;
-        const sy = cy - p.y * scale;
+        const sx = cx + (p.x - cxKm) * scale;
+        const sy = cy - (p.y - cyKm) * scale;
         return `${i === 0 ? 'M' : 'L'} ${sx.toFixed(1)},${sy.toFixed(1)}`;
       }).join(' ');
     }).join(' ');
-    coastSvg = `<path d="${paths}" stroke="rgba(148,163,184,0.7)" stroke-width="2" fill="none"/>`;
+    coastSvg = `<path d="${paths}" stroke="rgba(148,163,184,0.7)" stroke-width="2" fill="none" clip-path="url(#compass-clip)"/>`;
   } else {
     coastSvg = `
       <g transform="translate(${cx},${cy}) rotate(${cb})">
@@ -78,6 +92,9 @@ export function renderCompass(size, h, coast, snip, mini = false, bgColor = null
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${vb} ${vb}">
+      <defs>
+        <clipPath id="compass-clip"><circle cx="${cx}" cy="${cy}" r="${r}"/></clipPath>
+      </defs>
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="${bg}" stroke="rgba(148,163,184,0.12)" stroke-width="${mini ? 3 : 1}"/>
       ${coastSvg}
       ${labels}
