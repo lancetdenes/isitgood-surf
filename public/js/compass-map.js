@@ -111,6 +111,18 @@ export function mountMapCompass(slotId, coast) {
   });
   _maps.set(slotId, { map, ready: false });
   map.on('load', () => {
+    // Strip everything except land + water + coastlines so the compass
+    // reads as "this is the local coast", not a generic basemap with
+    // road clutter. Layer ids in CartoDB Dark Matter follow OpenMapTiles
+    // conventions: water*, landcover*, landuse*, boundary*, road*,
+    // place_*, country_*, building, etc.
+    const layers = map.getStyle().layers || [];
+    const KEEP = /^(background|water|landcover|landuse|park|wetland|sand|beach|coast|ice)/i;
+    for (const layer of layers) {
+      if (!KEEP.test(layer.id)) {
+        try { map.setLayoutProperty(layer.id, 'visibility', 'none'); } catch {}
+      }
+    }
     const e = _maps.get(slotId);
     if (e) e.ready = true;
   });

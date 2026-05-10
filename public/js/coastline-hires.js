@@ -10,7 +10,7 @@
  */
 
 import { parseCoastlineBinary } from '../../data/scripts/lib/coastline-binary.js';
-import { computeAdaptiveBearing, validateSeaward } from './coastline-shared.js';
+import { computeAdaptiveBearing, validateSeaward, stepAlongBearing } from './coastline-shared.js';
 
 let KDBushCtor = null;
 let _data = null;      // parsed binary (see parseCoastlineBinary)
@@ -301,18 +301,74 @@ export function findNearestCoastHires(lat, lon, grid) {
       offshoreDir: (seawardDir + 180) % 360,
       featureIdx: cand.featureIdx, segIdx: cand.segIdx,
       seawardFlipped, unreliableBearing: false, bothFailed,
+      // Defensive copy of the candidate's exclude key so the openness probe
+      // can ignore the candidate's own feature when checking for nearby land.
+      _excludeFeature: cand.featureIdx,
     };
   }
 
-  // candidates is non-empty (guarded above), so at least one iteration runs
-  // and lastResult is guaranteed set.
-  let lastResult = null;
-  for (const cand of candidates) {
-    const res = processCandidate(cand);
-    lastResult = res;
-    if (!res.bothFailed) break;
+  // Process all candidates, then sort by ocean-openness so barrier islands
+  // and peninsulas (Rockaway, Outer Banks) prefer the OPEN-OCEAN side over
+  // the inner-bay side that would otherwise win on raw distance alone.
+  const processed = candidates.map(processCandidate);
+  for (const res of processed) {
+    res._openness = oceanOpenness(idx, data, res);
   }
-  if (lastResult.bothFailed) lastResult.unreliableBearing = true;
-  delete lastResult.bothFailed;
-  return lastResult;
+  // Primary sort: openness DESC. Secondary: distance ASC.
+  // bothFailed candidates go to the back regardless.
+  processed.sort((a, b) => {
+    if (a.bothFailed !== b.bothFailed) return a.bothFailed ? 1 : -1;
+    if (b._openness !== a._openness) return b._openness - a._openness;
+    return a.distance - b.distance;
+  });
+
+  const winner = processed[0];
+  if (winner.bothFailed) winner.unreliableBearing = true;
+  delete winner.bothFailed;
+  delete winner._openness;
+  delete winner._excludeFeature;
+  return winner;
+}
+
+/**
+ * Score how "open" the ocean is in the candidate's seaward direction.
+ *
+ * Walks along seawardDir at increasing distances and queries the kdbush for
+ * any GSHHG segment near the probe point. The closer the first land hit,
+ * the lower the score. Open ocean → MAX_PROBE_KM; an enclosed bay → small
+ * number.
+ *
+ * Excludes the candidate's own feature so we don't count "this same
+ * coastline curving back at me" as land. Far enough out, this matters only
+ * for very long coastlines (>50 km features that wrap), but it's cheap.
+ *
+ * Probe ladder is logarithmic-ish: catches blocking by a nearby barrier
+ * (5 km), an inner bay's far shore (15 km), and lets open ocean clear at
+ * 30 km. 30 km is enough to disambiguate Jamaica Bay vs. open Atlantic.
+ */
+const OPENNESS_PROBES_KM = [5, 10, 20, 30];
+const OPENNESS_NEAR_DEG = 0.05; // ~5km radius for "near the probe point"
+
+function oceanOpenness(idx, data, cand) {
+  const { coastLat, coastLon, seawardDir, _excludeFeature } = cand;
+  for (const distKm of OPENNESS_PROBES_KM) {
+    const [pLat, pLon] = stepAlongBearing(coastLat, coastLon, seawardDir, distKm);
+    const pLon360 = to360(pLon);
+    let nearby;
+    try {
+      nearby = idx.range(
+        pLon360 - OPENNESS_NEAR_DEG, pLat - OPENNESS_NEAR_DEG,
+        pLon360 + OPENNESS_NEAR_DEG, pLat + OPENNESS_NEAR_DEG
+      );
+    } catch { return distKm; }
+    // Found land near this probe? — but if every hit is part of the
+    // candidate's own feature we ignore it (the same coastline curving).
+    let blockingHit = false;
+    for (const ci of nearby) {
+      const f = idx.segKey[ci * 2];
+      if (f !== _excludeFeature) { blockingHit = true; break; }
+    }
+    if (blockingHit) return distKm;
+  }
+  return OPENNESS_PROBES_KM[OPENNESS_PROBES_KM.length - 1] + 1; // fully open
 }
