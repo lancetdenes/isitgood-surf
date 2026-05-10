@@ -246,16 +246,22 @@ export function findNearestCoastHires(lat, lon, grid) {
   if (!_ready) throw new Error('Hires coastline not loaded');
   const data = _data, idx = _index;
   const TOP_N = 5;
-  const SEARCH_RADIUS_DEG = 0.5; // ~55 km
+  // Tiered search: most clicks land near coast and resolve at 0.5°.
+  // Offshore / inland clicks expand progressively until candidates are
+  // found (or we hit the planet-scale cap).
+  const SEARCH_RADII_DEG = [0.5, 2, 5, 10, 20];
 
   // The binary stores longitudes in 0-360; convert the query lon accordingly.
   const lon360 = to360(lon);
 
-  // Query kdbush via a lat-aware axis-aligned box. queryBox scales lon
-  // radius by 1/cos(lat) so high-latitude clicks get the same km coverage
-  // E-W as N-S, and handles antimeridian wraparound when the box straddles
-  // 0°/360° in the binary's lon space.
-  const candIndices = queryBox(idx, lon360, lat, SEARCH_RADIUS_DEG);
+  // queryBox: lat-aware axis-aligned box, antimeridian-aware. Returns kd
+  // point indices into the segment-midpoint array.
+  let candIndices = [];
+  let searchRadiusUsed = 0;
+  for (const r of SEARCH_RADII_DEG) {
+    candIndices = queryBox(idx, lon360, lat, r);
+    if (candIndices.length > 0) { searchRadiusUsed = r; break; }
+  }
   if (candIndices.length === 0) {
     return {
       coastLat: lat, coastLon: lon, distance: Infinity,

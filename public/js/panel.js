@@ -205,10 +205,10 @@ function render() {
   `;
 
   // Mount/refresh the MapLibre mini-map for the selected-detail compass.
-  // Mount whenever the placeholder exists; renderSelectedDetail only emits
-  // the placeholder when we have a real coast point to center on.
+  // The placeholder only exists when renderSelectedDetail decided we have
+  // a real coast feature, so just mount whenever the placeholder is there.
   const slotEl = panelEl.querySelector('.rp-mapcompass[data-slot]');
-  if (slotEl && coast && Number.isFinite(coast.coastLat) && Number.isFinite(coast.coastLon)) {
+  if (slotEl && coast) {
     mountMapCompass(slotEl.dataset.slot, coast);
   }
 
@@ -267,13 +267,14 @@ function renderSelectedDetail(h, coast) {
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
   const windLabel = h.windRating.desc || '';
 
-  // Show the map compass whenever we have a real coast point to center on.
-  // unreliableBearing only gates the *rating* confidence (rendered elsewhere
-  // as em-dashes) — the user still benefits from seeing the local coast.
-  const hasCoastPoint = coast
-    && Number.isFinite(coast.coastLat)
-    && Number.isFinite(coast.coastLon);
-  const compassHtml = hasCoastPoint
+  // findNearestCoast does a tiered search up to ~2200km and almost
+  // always returns a real coast. Only the "true mid-ocean" sentinel
+  // (no coast within 20°) falls through to the schematic SVG.
+  const hasRealCoast = coast
+    && coast.featureIdx >= 0
+    && Number.isFinite(coast.distance)
+    && coast.distance < Infinity;
+  const compassHtml = hasRealCoast
     ? renderMapCompassHTML(150, h, coast, _detailSlotId)
     : renderCompass(150, h, coast || { coastBearing: 0 }, false);
 
