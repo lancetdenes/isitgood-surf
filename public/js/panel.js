@@ -12,6 +12,7 @@ import {
 import { computeForecast } from './forecast.js';
 import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
 import { renderCompass as renderCompassSvg } from './compass-render.js';
+import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
 
 // ── State ──
 
@@ -85,6 +86,8 @@ function _selectClosestHour(targetHour) {
  */
 export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0, cachedLoad = null) {
   panelEl.classList.add('open');
+  // Fresh slot id per click — guarantees the prior map (if any) is torn down.
+  _resetDetailSlot();
   renderLoading(lat, lon);
 
   try {
@@ -201,6 +204,14 @@ function render() {
     </div>
   `;
 
+  // Mount/refresh the MapLibre mini-map for the selected-detail compass.
+  // Mount whenever the placeholder exists; renderSelectedDetail only emits
+  // the placeholder when we have a real coast point to center on.
+  const slotEl = panelEl.querySelector('.rp-mapcompass[data-slot]');
+  if (slotEl && coast && Number.isFinite(coast.coastLat) && Number.isFinite(coast.coastLon)) {
+    mountMapCompass(slotEl.dataset.slot, coast);
+  }
+
   // Wire up click handlers
   panelEl.querySelectorAll('[data-hour-idx]').forEach(el => {
     el.addEventListener('click', () => {
@@ -242,14 +253,33 @@ function renderOverall(or) {
   `;
 }
 
+// Stable slot id so the map can be reused across re-renders when the same
+// panel is open. Reset whenever a new openPanel() runs (different lat/lon)
+// — and tear down any prior MapLibre instance to avoid leaking GL contexts.
+let _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
+export function _resetDetailSlot() {
+  unmountAllMapCompasses();
+  _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
+}
+
 function renderSelectedDetail(h, coast) {
   const timeStr = h.time.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' +
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-  const windLabel = h.windRating.desc;
+  const windLabel = h.windRating.desc || '';
+
+  // Show the map compass whenever we have a real coast point to center on.
+  // unreliableBearing only gates the *rating* confidence (rendered elsewhere
+  // as em-dashes) — the user still benefits from seeing the local coast.
+  const hasCoastPoint = coast
+    && Number.isFinite(coast.coastLat)
+    && Number.isFinite(coast.coastLon);
+  const compassHtml = hasCoastPoint
+    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
+    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
 
   return `
     <div class="rp-detail">
-      ${renderCompass(150, h, coast, false)}
+      ${compassHtml}
       <div class="rp-detail-info">
         <div class="rp-detail-time">${timeStr} <span>· selected</span></div>
         <div class="rp-detail-row">
