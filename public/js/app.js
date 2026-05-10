@@ -16,6 +16,10 @@ import { HeatmapRenderer } from './heatmap.js';
 import { loadGrid } from './grid.js';
 import { initUI, updateLegendVisibility, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
+import KDBush from '/vendor/kdbush/index.js';
+import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
+
+setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
 import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
 
@@ -257,7 +261,7 @@ class App {
 
     try {
       await loadCoastline();
-      const coast = findNearestCoast(lat, lng);
+      const coast = findNearestCoast(lat, lng, this.swellGrid);
       // Start geocode in background (don't block panel opening)
       const geocodePromise = reverseGeocode(lat, lng);
       // Pass our grid cache loader so the panel's 57-hour forecast reuses
@@ -278,4 +282,7 @@ const app = new App();
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');
+});
+loadHiresCoastline().catch(err => {
+  console.warn('Failed to load hires coastline; continuing with Natural Earth:', err);
 });

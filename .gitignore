@@ -10,6 +10,7 @@ data/uploads/
 data/reference/*
 !data/reference/.gitkeep
 *.bin
+!public/assets/coastline-hires.bin
 *.grib2
 *.idx
 
@@ -20,3 +21,7 @@ data/reference/*
 .env
 .env.local
 .vercel
+
+# Coastline harness snapshots (regenerable PNGs + summaries)
+test/snapshots/*/
+!test/snapshots/.gitkeep

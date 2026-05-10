@@ -96,6 +96,25 @@ export class Grid {
     return { height, direction, period };
   }
 
+  /**
+   * Single-cell land/ocean check. Uses the first-parameter array (height for
+   * swell grids) and checks if the cell containing (lon, lat) has a non-zero
+   * value. Land cells are stored as 0; ocean cells always have some value even
+   * when calm (typically 0.01–0.1m minimum).
+   *
+   * Returns false if the point is outside the grid's latitude range.
+   */
+  isWet(lon, lat) {
+    let fi = (lon - this.lo1) / this.dx;
+    const fj = (this.la1 - lat) / this.dy;
+    while (fi < 0) fi += this.nx;
+    while (fi >= this.nx) fi -= this.nx;
+    if (fj < 0 || fj >= this.ny) return false;
+    const i = Math.floor(fi);
+    const j = Math.floor(fj);
+    return this.arrays[0][j * this.nx + i] > 0;
+  }
+
   /** Bilinear interpolation at a given lon/lat. Returns array of interpolated values (one per param). */
   interpolate(lon, lat) {
     // Normalize longitude to grid space

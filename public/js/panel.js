@@ -10,6 +10,9 @@ import {
   ratingBgColor, compassDir, msToMph, mToFt
 } from './ratings.js';
 import { computeForecast } from './forecast.js';
+import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
+import { renderCompass as renderCompassSvg } from './compass-render.js';
+import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
 
 // ── State ──
 
@@ -83,6 +86,8 @@ function _selectClosestHour(targetHour) {
  */
 export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0, cachedLoad = null) {
   panelEl.classList.add('open');
+  // Fresh slot id per click — guarantees the prior map (if any) is torn down.
+  _resetDetailSlot();
   renderLoading(lat, lon);
 
   try {
@@ -95,8 +100,11 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     const effectiveCoast = data.coast || coast;
 
     const hours = data.hours.map(raw => {
-      // Wave power per unit crest length, deep-water approximation:
-      // P = (ρg²/64π) × H² × T  ≈  0.49 × H² × T  kW/m   (H in m, T in s)
+      // Wave power per unit crest length (deep-water approximation).
+      // P = (ρ g² / 64π) × H² × T  ≈  0.49 × H² × T  kW/m   (H in m, T in s)
+      // This captures the "how much surf is actually showing up" quantity that
+      // height alone misses: a clean long-period swell packs more energy than
+      // a fatter short-period wave. Used below to size the 7-day bar.
       const surfPower = 0.49 * raw.swellHeightM * raw.swellHeightM * raw.swellPeriod;
 
       const entry = {
@@ -113,9 +121,20 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
         swellRating: null, windRating: null, overallRating: null,
       };
 
-      entry.swellRating = rateSwell(entry.swellHeightFt, entry.swellPeriod, entry.swellDir, effectiveCoast.seawardDir);
-      entry.windRating = rateWind(entry.windSpeedMph, entry.windDir, effectiveCoast.offshoreDir);
-      entry.overallRating = rateOverall(entry.swellRating, entry.windRating);
+      // When the coastline lookup couldn't reliably determine a bearing
+      // (no candidate in range, or both seaward dirs failed wet-test) we
+      // skip rating rather than render a sentinel-derived score.
+      const reliable = effectiveCoast && !effectiveCoast.unreliableBearing;
+      if (reliable) {
+        entry.swellRating = rateSwell(entry.swellHeightFt, entry.swellPeriod, entry.swellDir, effectiveCoast.seawardDir);
+        entry.windRating = rateWind(entry.windSpeedMph, entry.windDir, effectiveCoast.offshoreDir);
+        entry.overallRating = rateOverall(entry.swellRating, entry.windRating);
+      } else {
+        const flat = { score: null, label: '—', color: '#64748b' };
+        entry.swellRating = { ...flat };
+        entry.windRating = { ...flat, desc: 'coast unknown' };
+        entry.overallRating = { ...flat, desc: 'coast unknown' };
+      }
 
       return entry;
     });
@@ -180,7 +199,18 @@ function render() {
     ${renderSelectedDetail(selHour, coast)}
     ${renderHourly(selDay, coast)}
     ${renderDaily(days, coast)}
+    <div style="font-size: 10px; color: rgba(148,163,184,0.5); margin-top: 12px; text-align: right; padding-right: 4px;">
+      Coast: GSHHG &bull; Weather: NOAA GFS
+    </div>
   `;
+
+  // Mount/refresh the MapLibre mini-map for the selected-detail compass.
+  // The placeholder only exists when renderSelectedDetail decided we have
+  // a real coast feature, so just mount whenever the placeholder is there.
+  const slotEl = panelEl.querySelector('.rp-mapcompass[data-slot]');
+  if (slotEl && coast) {
+    mountMapCompass(slotEl.dataset.slot, coast);
+  }
 
   // Wire up click handlers
   panelEl.querySelectorAll('[data-hour-idx]').forEach(el => {
@@ -211,25 +241,46 @@ function renderHeader(lat, lon) {
 }
 
 function renderOverall(or) {
+  const scoreText = or.score == null ? '—' : or.score.toFixed(1);
   return `
     <div class="rp-overall">
-      <div class="rp-score" style="background:${or.color}">${or.score.toFixed(1)}</div>
+      <div class="rp-score" style="background:${or.color}">${scoreText}</div>
       <div>
         <div class="rp-rating-label" style="color:${or.color}">${or.label}</div>
-        <div class="rp-rating-desc">${or.desc}</div>
+        <div class="rp-rating-desc">${or.desc || ''}</div>
       </div>
     </div>
   `;
 }
 
+// Stable slot id so the map can be reused across re-renders when the same
+// panel is open. Reset whenever a new openPanel() runs (different lat/lon)
+// — and tear down any prior MapLibre instance to avoid leaking GL contexts.
+let _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
+export function _resetDetailSlot() {
+  unmountAllMapCompasses();
+  _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
+}
+
 function renderSelectedDetail(h, coast) {
   const timeStr = h.time.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' +
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-  const windLabel = h.windRating.desc;
+  const windLabel = h.windRating.desc || '';
+
+  // findNearestCoast does a tiered search up to ~2200km and almost
+  // always returns a real coast. Only the "true mid-ocean" sentinel
+  // (no coast within 20°) falls through to the schematic SVG.
+  const hasRealCoast = coast
+    && coast.featureIdx >= 0
+    && Number.isFinite(coast.distance)
+    && coast.distance < Infinity;
+  const compassHtml = hasRealCoast
+    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
+    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
 
   return `
     <div class="rp-detail">
-      ${renderCompass(150, h, coast, false)}
+      ${compassHtml}
       <div class="rp-detail-info">
         <div class="rp-detail-time">${timeStr} <span>· selected</span></div>
         <div class="rp-detail-row">
@@ -293,10 +344,10 @@ function renderDaily(days, coast) {
     const noon = day.hours[Math.floor(day.hours.length / 2)] || am;
     const pm = day.hours[day.hours.length - 1] || am;
 
-    // Bar length = peak wave power for the day (best window, sqrt-curved so
-    // small surf still reads), ceiling 100 kW/m (≈ 10 ft @ 16 s territory).
-    // Color = overall rating (factors in wind), so a powerful but onshore day
-    // shows a long but muted bar.
+    // Bar magnitude = peak wave power over the day (the best window, not the
+    // average) with a sqrt curve so the low end reads more honestly. Ceiling
+    // at 100 kW/m, which lines up with big-wave days (e.g. 10 ft @ 18 s).
+    // Color still comes from the avg overall rating so wind/direction affect it.
     const avgScore = day.hours.reduce((s, h) => s + h.overallRating.score, 0) / day.hours.length;
     const peakPower = day.hours.reduce((m, h) => Math.max(m, h.surfPower), 0);
     const { color } = overallRating(avgScore);
@@ -340,75 +391,14 @@ function renderDaily(days, coast) {
 // ── Compass SVG rendering ──
 
 /**
- * Render a compass SVG showing coast, swell arrow, and wind barbs.
- * @param {number} size - rendered pixel size
- * @param {object} h - hour data entry
- * @param {object} coast - coast orientation data
- * @param {boolean} mini - if true, use thicker strokes for small rendering
- * @param {string} bgColor - optional background tint color
+ * Wrapper around compass-render.js that fetches the coast snippet here so
+ * callers don't have to.
  */
 function renderCompass(size, h, coast, mini = false, bgColor = null) {
-  const vb = 200; // viewBox is always 200x200
-  const cx = 100, cy = 100, r = 85;
-  const bg = bgColor || 'rgba(15,23,42,0.8)';
-
-  // Coast bearing determines the coastline orientation
-  const cb = coast.coastBearing;
-
-  // Swell arrow scaling by height (1-8ft)
-  const ht = Math.min(h.swellHeightFt, 8);
-  const arrowW = mini ? Math.max(4, 3 + ht) : Math.max(2, 1.5 + ht * 0.5);
-  const arrowH = mini ? Math.max(16, 10 + ht * 4) : Math.max(14, 10 + ht * 3);
-  const headW = mini ? Math.max(10, 6 + ht * 2) : Math.max(6, 4 + ht * 1.5);
-  const headH = mini ? 14 : 10;
-  const arrowStart = mini ? -70 : -58;
-  // Connect arrowhead directly to shaft end — no gap
-  const shaftEnd = arrowStart + arrowH;
-  const arrowTip = shaftEnd + headH;
-  const arrowOp = Math.min(0.95, 0.5 + ht / 10);
-
-  // Wind barb scaling by speed (0-30 mph)
-  const ws = Math.min(h.windSpeedMph, 30);
-  const barbCount = Math.max(1, Math.min(6, Math.ceil(ws / 5)));
-  const barbLen = mini ? Math.max(20, 15 + ws) : Math.max(18, 12 + ws * 0.8);
-  const barbW = mini ? 4 : 1.4;
-  const barbOp = Math.min(0.7, 0.3 + ws / 30);
-  const barbSpacing = mini ? 12 : 10;
-
-  // Cardinal labels
-  const labels = mini ? '' : `
-    <text x="100" y="10" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">N</text>
-    <text x="194" y="104" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">E</text>
-    <text x="100" y="198" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">S</text>
-    <text x="6" y="104" text-anchor="middle" fill="#475569" font-size="11" font-weight="600">W</text>
-  `;
-
-  // Wind barbs SVG — single line with tick at the end
-  let barbs = '';
-  const halfSpread = ((barbCount - 1) * barbSpacing) / 2;
-  for (let i = 0; i < barbCount; i++) {
-    const x = -halfSpread + i * barbSpacing;
-    const startY = -(r - 8);
-    const endY = startY + barbLen;
-    barbs += `<line x1="${x}" y1="${startY}" x2="${x}" y2="${endY}" stroke="white" stroke-width="${barbW}" stroke-dasharray="${mini ? '8,6' : '5,4'}"/>`;
-    barbs += `<line x1="${x}" y1="${endY}" x2="${x + (mini ? 10 : 6)}" y2="${endY - (mini ? 10 : 6)}" stroke="white" stroke-width="${barbW}"/>`;
-  }
-
-  return `
-    <svg width="${size}" height="${size}" viewBox="0 0 ${vb} ${vb}" style="flex-shrink:0">
-      <circle cx="${cx}" cy="${cy}" r="${r}" fill="${bg}" stroke="rgba(148,163,184,0.12)" stroke-width="${mini ? 3 : 1}"/>
-      <g transform="translate(${cx},${cy}) rotate(${cb})">
-        <path d="M 0,-${r} A ${r} ${r} 0 0 1 0,${r}" fill="rgba(56,189,248,0.04)"/>
-        <line x1="0" y1="-${r}" x2="0" y2="${r}" stroke="rgba(148,163,184,0.2)" stroke-width="${mini ? 4 : 2}"/>
-      </g>
-      ${labels}
-      <g transform="translate(${cx},${cy}) rotate(${h.swellDir})">
-        <rect x="${-arrowW}" y="${arrowStart}" width="${arrowW * 2}" height="${arrowH}" fill="white" opacity="${arrowOp}" rx="${mini ? 2 : 1}"/>
-        <polygon points="0,${arrowTip} ${-headW},${shaftEnd} ${headW},${shaftEnd}" fill="white" opacity="${arrowOp}"/>
-      </g>
-      <g transform="translate(${cx},${cy}) rotate(${h.windDir})" opacity="${barbOp}">
-        ${barbs}
-      </g>
-    </svg>
-  `;
+  // 6 km snippet — wider gives a too-zoomed-out view where real local
+  // features (points, bays, jetties) get smoothed away inside the compass
+  // circle. compass-render.js scales the half-span (3 km) to 75% of r so
+  // the snippet sits well inside the bezel even when it runs diagonally.
+  const snip = mini ? null : getCoastSnippet(coast.featureIdx, coast.segIdx, coast.coastLat, coast.coastLon, 6);
+  return renderCompassSvg(size, h, coast, snip, mini, bgColor);
 }

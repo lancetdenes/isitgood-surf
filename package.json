@@ -12,15 +12,20 @@
     "update": "bash data/scripts/update.sh",
     "update:gfs": "bash data/scripts/update.sh gfs",
     "update:ecmwf": "bash data/scripts/update.sh ecmwf",
+    "build:coastline": "node data/scripts/build-coastline.js",
     "build:coast-points": "node data/scripts/build-coast-points.js",
+    "build:coast-points:hires": "node data/scripts/build-coast-points-hires.js",
     "fill:named-offshore": "node data/scripts/fill-named-offshore.js",
-    "test:build": "node --test 'data/scripts/test/*.test.js'"
+    "test:build": "node --test 'data/scripts/test/*.test.js'",
+    "test:hires": "node --test 'public/js/test/coastline-hires.test.js' 'public/js/test/coastline-fixtures.test.js'",
+    "test:harness": "node test/harness/run.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "kdbush": "^4.0.2"

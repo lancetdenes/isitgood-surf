@@ -26,6 +26,9 @@ app.use((req, res, next) => {
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve kdbush from node_modules for the hires coastline module.
+app.use('/vendor/kdbush', express.static(path.join(__dirname, 'node_modules/kdbush')));
+
 // Serve data files with caching headers (binary grids don't change within a run)
 app.use('/data', express.static(DATA_DIR, {
   maxAge: '1h',

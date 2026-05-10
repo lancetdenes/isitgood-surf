@@ -60,6 +60,8 @@ function scoreWind(mph, windDir, offshoreDir) {
 }
 
 function scoreSpot(spot, windGrid, swellGrid) {
+  // Spots whose offshoreDir couldn't be reliably determined at build time
+  // are excluded from the ranking rather than rated against a sentinel.
   if (spot.o == null) return null;
   const w = windGrid?.interpolate?.(spot.ln, spot.la);
   const s = swellGrid?.interpolate?.(spot.ln, spot.la);
@@ -76,7 +78,10 @@ function scoreSpot(spot, windGrid, swellGrid) {
   const swDir = swellGrid.arrays ? interpolateSwellDir(swellGrid, spot.ln, spot.la) : s[1];
 
   // Optimal swell approaches from opposite of offshore (waves from sea).
-  const optimalSwell = (spot.o + 180) % 360;
+  // GSHHG-built spots carry an explicit `sw` field; legacy NE-built spots
+  // derive it from offshore. Same value, but `sw` avoids the round-trip
+  // when the build pipeline computed it directly from coast bearing.
+  const optimalSwell = spot.sw != null ? spot.sw : (spot.o + 180) % 360;
   const sw = scoreSwell(swHeightFt, swPeriod, swDir, optimalSwell);
   const wi = scoreWind(windMph, windDir, spot.o);
   const overall = sw * 0.6 + wi * 0.4;
@@ -315,7 +320,7 @@ async function onRowClick(la, ln, peakHour) {
   try {
     await loadCoastline();
   } catch (e) { /* coastline is best-effort; panel works without it */ }
-  const coast = findNearestCoast(la, ln);
+  const coast = findNearestCoast(la, ln, _appRef?.swellGrid);
   const geocodePromise = reverseGeocode(la, ln);
   await openPanel(la, ln, coast, _appRef.dataPath, _appRef.runTime, _appRef.hour,
                   (url) => _appRef._cachedLoadGrid(url));

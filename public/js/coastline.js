@@ -2,12 +2,21 @@
  * coastline.js — Coastline detection, bearing computation, reverse geocoding
  *
  * Loads a bundled Natural Earth coastline GeoJSON and provides:
- *   - findNearestCoast(lat, lon) → nearest coastline point + orientation
+ *   - findNearestCoast(lat, lon, grid) → nearest coastline point + orientation
  *   - reverseGeocode(lat, lon) → nearest place name
  */
 
+import { computeAdaptiveBearing, validateSeaward } from './coastline-shared.js';
+import { isHiresReady, findNearestCoastHires, getCoastSnippetHires } from './coastline-hires.js';
+
 let coastData = null;
 let _loadPromise = null;
+
+/** Test hook: inject coastline data directly without going through fetch. */
+export function _setCoastData(data) {
+  coastData = data;
+  _loadPromise = Promise.resolve();
+}
 
 /** Load the bundled coastline GeoJSON. Idempotent; concurrent callers share one fetch. */
 export function loadCoastline() {
@@ -29,17 +38,6 @@ function haversine(lat1, lon1, lat2, lon2) {
             Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) *
             Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/** Bearing from point 1 to point 2 in degrees (0-360) */
-function bearing(lat1, lon1, lat2, lon2) {
-  const toRad = Math.PI / 180;
-  const toDeg = 180 / Math.PI;
-  const dLon = (lon2 - lon1) * toRad;
-  const y = Math.sin(dLon) * Math.cos(lat2 * toRad);
-  const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
-            Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos(dLon);
-  return (Math.atan2(y, x) * toDeg + 360) % 360;
 }
 
 /**
@@ -67,83 +65,185 @@ function projectOntoSegment(pLon, pLat, aLon, aLat, bLon, bLat) {
  *   - Smooths bearing over multiple neighboring points
  *   - Determines seaward direction using coastline winding order
  */
-export function findNearestCoast(lat, lon) {
+function findNearestCoastNE(lat, lon, grid) {
   if (!coastData) throw new Error('Coastline not loaded');
 
-  let bestDist = Infinity;
-  let bestFeatureIdx = -1;
-  let bestSegIdx = -1;
-  let bestPt = null;
+  const TOP_N = 5;
+  const candidates = []; // sorted ascending by dist
 
-  // Search all features for closest point on any segment
+  function insertCandidate(c) {
+    let i = 0;
+    while (i < candidates.length && candidates[i].dist < c.dist) i++;
+    candidates.splice(i, 0, c);
+    if (candidates.length > TOP_N) candidates.pop();
+  }
+
+  // Scan every segment, tracking the top-N nearest.
   for (let f = 0; f < coastData.features.length; f++) {
     const coords = coastData.features[f].geometry.coordinates;
     for (let i = 0; i < coords.length - 1; i++) {
       const [aLon, aLat] = coords[i];
       const [bLon, bLat] = coords[i + 1];
 
-      // Quick bounding check
       const minLat = Math.min(aLat, bLat) - 2;
       const maxLat = Math.max(aLat, bLat) + 2;
       const minLon = Math.min(aLon, bLon) - 2;
       const maxLon = Math.max(aLon, bLon) + 2;
       if (lat < minLat || lat > maxLat || lon < minLon || lon > maxLon) continue;
 
-      // Project click point onto segment
       const proj = projectOntoSegment(lon, lat, aLon, aLat, bLon, bLat);
       const d = haversine(lat, lon, proj.lat, proj.lon);
 
-      if (d < bestDist) {
-        bestDist = d;
-        bestFeatureIdx = f;
-        bestSegIdx = i;
-        bestPt = [proj.lat, proj.lon];
+      if (candidates.length < TOP_N || d < candidates[candidates.length - 1].dist) {
+        insertCandidate({ dist: d, featureIdx: f, segIdx: i, pt: [proj.lat, proj.lon] });
       }
     }
   }
 
-  if (!bestPt) {
+  if (candidates.length === 0) {
     return {
-      coastLat: lat, coastLon: lon,
-      distance: Infinity,
-      coastBearing: 45,
-      seawardDir: 135,
-      offshoreDir: 315,
+      coastLat: lat, coastLon: lon, distance: Infinity,
+      coastBearing: 45, seawardDir: 135, offshoreDir: 315,
+      featureIdx: -1, segIdx: -1,
+      seawardFlipped: false, unreliableBearing: true,
     };
   }
 
-  // Compute smoothed coast bearing using multiple neighboring segments
-  const coords = coastData.features[bestFeatureIdx].geometry.coordinates;
-  const SMOOTH = 3; // use 3 points on each side
-  const startIdx = Math.max(0, bestSegIdx - SMOOTH);
-  const endIdx = Math.min(coords.length - 1, bestSegIdx + 1 + SMOOTH);
+  // Per-candidate processing: compute bearing with adaptive window, then validate
+  // seaward against the grid (flip if needed). Returns a result object plus a
+  // `bothFailed` flag when neither seawardDir nor its 180° flip pointed at ocean.
+  function processCandidate(cand) {
+    const getVertex = (f, i) => {
+      const coords = coastData.features[f].geometry.coordinates;
+      if (i < 0 || i >= coords.length) return null;
+      return coords[i];
+    };
+    const coastBearing = computeAdaptiveBearing(getVertex, cand.featureIdx, cand.segIdx);
+    const assumedSeaward = (coastBearing + 90) % 360;
+    const { seawardDir, seawardFlipped, bothFailed } = validateSeaward(grid, cand.pt[0], cand.pt[1], assumedSeaward);
 
-  // Average bearing using sin/cos to handle wrap-around
-  let sinSum = 0, cosSum = 0;
-  for (let i = startIdx; i < endIdx; i++) {
-    const [aLon, aLat] = coords[i];
-    const [bLon, bLat] = coords[i + 1];
-    const b = bearing(aLat, aLon, bLat, bLon);
-    const rad = b * Math.PI / 180;
-    sinSum += Math.sin(rad);
-    cosSum += Math.cos(rad);
+    return {
+      coastLat: cand.pt[0], coastLon: cand.pt[1],
+      distance: cand.dist,
+      coastBearing,
+      seawardDir,
+      offshoreDir: (seawardDir + 180) % 360,
+      featureIdx: cand.featureIdx,
+      segIdx: cand.segIdx,
+      seawardFlipped,
+      unreliableBearing: false,
+      bothFailed,
+    };
   }
-  const coastBearing = (Math.atan2(sinSum, cosSum) * 180 / Math.PI + 360) % 360;
 
-  // Seaward = right perpendicular of coast line direction.
-  // Natural Earth coastlines follow the convention where water is on the right
-  // side of the line direction (derived from counterclockwise land polygon boundaries).
-  const seawardDir = (coastBearing + 90) % 360;
-  const offshoreDir = (seawardDir + 180) % 360;
+  // Try each candidate. First one whose seaward (possibly flipped) is wet wins.
+  let lastResult = null;
+  for (const cand of candidates) {
+    const res = processCandidate(cand);
+    lastResult = res;
+    if (!res.bothFailed) break;
+  }
 
-  return {
-    coastLat: bestPt[0],
-    coastLon: bestPt[1],
-    distance: bestDist,
-    coastBearing,
-    seawardDir,
-    offshoreDir,
-  };
+  // candidates was non-empty (guarded above), so the retry loop ran at least
+  // once and lastResult is guaranteed set here.
+  if (lastResult.bothFailed) lastResult.unreliableBearing = true;
+  delete lastResult.bothFailed;
+  return lastResult;
+}
+
+/**
+ * Return ~maxKm of local coastline centered on a segment, projected into local
+ * kilometers relative to (centerLat, centerLon). Used by the compass renderer.
+ *
+ * Breaks the output into subpaths whenever consecutive Natural Earth vertices
+ * are more than `BREAK_KM` apart — otherwise MultiLineString features that
+ * got flattened into one array (Long Island, Hawaiian islands, etc.) render
+ * as zigzags jumping across land.
+ *
+ * @returns {{ subpaths: Array<Array<{x: number, y: number}>>, landSide: 'left'|'right' }}
+ */
+function getCoastSnippetNE(featureIdx, segIdx, centerLat, centerLon, maxKm = 10) {
+  if (!coastData || featureIdx < 0) return { subpaths: [], landSide: 'right' };
+  const coords = coastData.features[featureIdx].geometry.coordinates;
+  const halfKm = maxKm / 2;
+  const cosLat = Math.cos(centerLat * Math.PI / 180);
+  const BREAK_KM = 5;
+
+  function toLocal(lon, lat) {
+    return {
+      x: (lon - centerLon) * 111 * cosLat,
+      y: (lat - centerLat) * 111,
+    };
+  }
+
+  function segKm(lonA, latA, lonB, latB) {
+    const dx = (lonA - lonB) * 111 * cosLat;
+    const dy = (latA - latB) * 111;
+    return Math.hypot(dx, dy);
+  }
+
+  // Walk outward in each direction, accumulating arc length until halfKm.
+  // Record each accepted vertex's local coord and the km gap to the previous.
+  const LEFT_KM = (gapBefore, coord) => ({ gapBefore, coord });
+
+  const left = []; // ordered deepest→center; each entry has gapBefore = gap to the NEXT (more central) vertex
+  {
+    let accum = 0;
+    let prevLon = coords[segIdx][0], prevLat = coords[segIdx][1];
+    left.push(LEFT_KM(0, toLocal(prevLon, prevLat))); // segIdx itself, no gap to self
+    for (let i = segIdx - 1; i >= 0; i--) {
+      const [lonA, latA] = coords[i];
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      left.push(LEFT_KM(gap, toLocal(lonA, latA)));
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
+      if (accum >= halfKm) break;
+    }
+    left.reverse(); // now ordered leftmost → segIdx
+  }
+
+  const right = []; // ordered center→right; each entry gapBefore = gap to the PREVIOUS vertex
+  {
+    let accum = 0;
+    let prevLon = coords[segIdx][0], prevLat = coords[segIdx][1];
+    for (let i = segIdx + 1; i < coords.length; i++) {
+      const [lonA, latA] = coords[i];
+      const gap = segKm(prevLon, prevLat, lonA, latA);
+      right.push({ gapBefore: gap, coord: toLocal(lonA, latA) });
+      accum += gap;
+      prevLon = lonA; prevLat = latA;
+      if (accum >= halfKm) break;
+    }
+  }
+
+  // Combine in polyline order, breaking into subpaths at gaps > BREAK_KM.
+  // Note: `left` includes segIdx as its last item with gapBefore=0, and `right`
+  // starts with the vertex after segIdx with gapBefore = segKm(segIdx, segIdx+1).
+  const sequence = [...left, ...right];
+  const subpaths = [];
+  let current = [];
+  for (const entry of sequence) {
+    if (entry.gapBefore > BREAK_KM && current.length) {
+      subpaths.push(current);
+      current = [];
+    }
+    current.push(entry.coord);
+  }
+  if (current.length) subpaths.push(current);
+
+  return { subpaths, landSide: 'right' };
+}
+
+/** Public: find nearest coast. Delegates to hires when available. */
+export function findNearestCoast(lat, lon, grid) {
+  if (isHiresReady()) return findNearestCoastHires(lat, lon, grid);
+  return findNearestCoastNE(lat, lon, grid);
+}
+
+/** Public: get coast snippet. Delegates to hires when available. */
+export function getCoastSnippet(featureIdx, segIdx, centerLat, centerLon, maxKm) {
+  if (isHiresReady()) return getCoastSnippetHires(featureIdx, segIdx, centerLat, centerLon, maxKm);
+  return getCoastSnippetNE(featureIdx, segIdx, centerLat, centerLon, maxKm);
 }
 
 /**
