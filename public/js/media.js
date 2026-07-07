@@ -256,8 +256,10 @@ export async function renderMediaStrip(container, lat, lng) {
       return el;
     }));
   } catch {
-    const thumbs = strip.querySelector('.media-thumbs');
-    if (thumbs) thumbs.textContent = 'Media unavailable.';
+    // List endpoint failing means the backend isn't (fully) provisioned —
+    // e.g. functions deployed but no DATABASE_URL yet. Hide the feature
+    // rather than showing a dead strip.
+    strip.remove();
   }
 }
 
