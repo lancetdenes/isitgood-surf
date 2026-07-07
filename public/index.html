@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Is It Good? — Surf Forecast</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
   <link rel="stylesheet" href="css/style.css">
   <!-- Loaded before app.js so SURF_CONFIG is available at startup.
@@ -25,12 +26,14 @@
     </div>
 
     <div class="controls-group">
-      <div class="btn-group" id="model-selector">
+      <!-- Hidden until an ECMWF pipeline exists: only GFS runs in CI, and
+           prod pins MANIFEST_URL to GFS, so the toggle was misleading. -->
+      <div class="btn-group" id="model-selector" style="display:none">
         <button class="ctrl-btn active" data-model="gfs">GFS</button>
         <button class="ctrl-btn" data-model="ecmwf">ECMWF</button>
       </div>
 
-      <div class="divider"></div>
+      <div class="divider" style="display:none"></div>
 
       <div class="btn-group" id="layer-selector">
         <button class="ctrl-btn active" data-layer="wind">Wind</button>

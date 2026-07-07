@@ -58,9 +58,20 @@ function initTimeline(app) {
   let playing = false;
   let interval = null;
 
+  // Coalesce scrub events to one setHour per animation frame — the input
+  // event can fire far faster than we can usefully re-render, and each
+  // setHour kicks off grid loads + layer updates.
+  let pendingHour = null;
   slider.addEventListener('input', () => {
-    app.setHour(parseInt(slider.value));
-    updateHourDisplay(parseInt(slider.value), app.runTime);
+    const hour = parseInt(slider.value);
+    updateHourDisplay(hour, app.runTime);  // label stays instant
+    if (pendingHour === null) {
+      requestAnimationFrame(() => {
+        app.setHour(pendingHour);
+        pendingHour = null;
+      });
+    }
+    pendingHour = hour;
   });
 
   let animating = false;

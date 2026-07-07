@@ -110,6 +110,7 @@ class App {
 
   // Client-side grid cache — avoids re-downloading when scrubbing timeline
   _gridCache = new Map();
+  _loadSeq = 0;
 
   async _cachedLoadGrid(url) {
     if (this._gridCache.has(url)) return this._gridCache.get(url);
@@ -124,11 +125,17 @@ class App {
     const fhr = String(hour).padStart(3, '0');
     setStatus(`Loading f${fhr}...`);
 
+    // Latest-wins: rapid scrubbing spawns overlapping loads; only the most
+    // recently requested hour may apply its grids when it resolves.
+    const seq = ++this._loadSeq;
+
     try {
       const [windGrid, swellGrid] = await Promise.all([
         this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`),
         this._loadSwellWithFallback(hour),
       ]);
+
+      if (seq !== this._loadSeq) return;
 
       if (windGrid) {
         this.windGrid = windGrid;

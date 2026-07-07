@@ -22,7 +22,10 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  /* dvh tracks the *visible* viewport on mobile — with plain 100vh the
+     bottom timeline sits behind iOS Safari's toolbar. */
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
 }
 
@@ -148,6 +151,8 @@ body {
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
+  /* Keep the controls above the iPhone home indicator */
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
   background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -252,7 +257,7 @@ body {
 /* ── Legend ── */
 .legend {
   position: absolute;
-  bottom: 70px;
+  bottom: calc(70px + env(safe-area-inset-bottom));
   left: 16px;
   z-index: 10;
   background: var(--surface);
@@ -265,7 +270,7 @@ body {
 }
 
 .swell-legend {
-  bottom: 130px;
+  bottom: calc(130px + env(safe-area-inset-bottom));
 }
 
 .legend-title {
@@ -349,7 +354,7 @@ body {
   top: 50px;
   right: -400px;
   width: 390px;
-  bottom: 56px;
+  bottom: calc(56px + env(safe-area-inset-bottom));
   z-index: 12;
   background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
@@ -477,10 +482,28 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 768px) {
+  /* Single scrollable row: wrapping made the bar taller than the fixed
+     top offsets other elements assume, clipping panel headers. */
   .top-bar {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
     gap: 8px;
     padding: 8px 12px;
+  }
+  .top-bar::-webkit-scrollbar { display: none; }
+
+  .controls-group {
+    flex-shrink: 0;
+  }
+
+  .hint {
+    display: none;
+  }
+
+  .status {
+    flex-shrink: 0;
   }
 
   .rating-panel {
@@ -491,6 +514,12 @@ body {
 
   .legend {
     min-width: 160px;
+  }
+
+  /* 15 tick labels don't fit a phone-width track; majors alone stay
+     evenly spaced because they're on a uniform 24h interval. */
+  .timeline-ticks .tick-minor {
+    display: none;
   }
 }
 
@@ -503,12 +532,13 @@ body {
 .pumping-backdrop.visible { opacity: 1; pointer-events: auto; }
 
 .pumping-panel {
-  position: fixed; top: 0; right: 0; height: 100vh; width: 380px;
+  position: fixed; top: 0; right: 0; height: 100vh; height: 100dvh; width: 380px;
   max-width: 95vw; background: var(--surface-solid);
   border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   transform: translateX(100%); transition: transform 220ms ease;
   z-index: 60; box-shadow: -12px 0 32px rgba(0, 0, 0, 0.5);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 .pumping-panel.visible { transform: translateX(0); }
 

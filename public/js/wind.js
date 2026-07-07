@@ -1,8 +1,8 @@
 /**
  * wind.js — White particle animation matching Windy.com style
  *
- * Small white dashes that flow through the wind field at constant speed.
- * Very short trails that fade quickly. Direction-only, not speed.
+ * Small white dashes that flow through the wind field. Dash speed encodes
+ * wind speed (scaled to the map zoom) with very short, fast-fading trails.
  */
 
 export class WindRenderer {
@@ -91,8 +91,10 @@ export class WindRenderer {
 
   setGrid(grid) {
     this.grid = grid;
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this._initParticles();
+    // Keep existing particles — their lng/lat positions are still valid, only
+    // the velocity field changed. Re-seeding 12k particles on every timeline
+    // scrub tick caused visible flashes and GC churn.
+    if (this.particles.length === 0) this._initParticles();
   }
 
   start() {
@@ -143,16 +145,21 @@ export class WindRenderer {
       return;
     }
 
-    // Scale speed and line width with zoom for consistent appearance
+    // Line width keeps a gentle cosmetic curve, but SPEED must track the
+    // map scale: Web-Mercator pixels-per-degree doubles every zoom level,
+    // so geographic consistency needs 2^(zoom-5), not 2^((zoom-5)/3).
+    // The exponent is clamped so extremes stay usable: below z3 particles
+    // would freeze, above z8 they would teleport.
     const zoom = this.map.getZoom();
     const zoomScale = Math.pow(2, (zoom - 5) / 3);
+    const speedZoom = Math.pow(2, Math.min(Math.max(zoom - 5, -2), 3));
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
     ctx.lineCap = 'round';
     ctx.beginPath();
 
-    const frameSpeed = this.speed * zoomScale;
+    const frameSpeed = this.speed * speedZoom;
 
     for (const p of this.particles) {
       const wind = this.grid.interpolate(p.lng, p.lat);
@@ -175,13 +182,15 @@ export class WindRenderer {
         continue;
       }
 
-      // Normalized direction — constant pixel speed
+      // Direction from u/v; step length encodes the actual wind speed
+      // (10 m/s = reference) so gales visibly outrun light breezes.
       const nx = u / speed;
       const ny = v / speed;
+      const step = Math.min(frameSpeed * Math.max(0.15, Math.min(speed / 10, 2.2)), 8);
 
       const pt0 = this.map.project([p.lng, p.lat]);
-      const px1 = pt0.x + nx * frameSpeed;
-      const py1 = pt0.y - ny * frameSpeed;
+      const px1 = pt0.x + nx * step;
+      const py1 = pt0.y - ny * step;
 
       // Unproject back to geo
       const geo1 = this.map.unproject([px1, py1]);

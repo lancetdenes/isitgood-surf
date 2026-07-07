@@ -41,7 +41,7 @@ const SWELL_PALETTE = [
 ];
 
 // 1x1 transparent PNG data URL (placeholder before first render)
-const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQIHWNgAAIABQABNjN9GQAAAABJRlFOYQQAAAAASUVORK5CYII=';
+const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=';
 
 function interpolatePalette(palette, val) {
   if (val <= palette[0][0]) return palette[0][1];
@@ -94,6 +94,8 @@ export class HeatmapRenderer {
     this.visible = true;
     this._renderTimer = null;
     this._layerReady = false;
+    this._renderGen = 0;
+    this._lastBlobUrl = null;
 
     // Offscreen rendering
     this._canvas = document.createElement('canvas');
@@ -234,12 +236,12 @@ export class HeatmapRenderer {
         // touches land stay transparent — no smeared heights over coastline.
         let magnitude;
         if (isSwell) {
-          const sw = this.grid.interpolateSwell(lon, lat);
-          if (!sw) {
+          const swh = this.grid.interpolateSwellHeight(lon, lat);
+          if (swh === null) {
             data[px] = 0; data[px + 1] = 0; data[px + 2] = 0; data[px + 3] = 0;
             continue;
           }
-          magnitude = sw.height;
+          magnitude = swh;
         } else {
           const vals = this.grid.interpolate(lon, lat);
           if (!vals) {
@@ -264,14 +266,28 @@ export class HeatmapRenderer {
 
     this._ctx.putImageData(this._imgData, 0, 0);
 
-    try {
-      this.map.getSource('heatmap').updateImage({
-        url: this._canvas.toDataURL(),
-        coordinates: boundsToCoords(bounds),
-      });
-    } catch (e) {
-      // Source not ready yet
-    }
+    // Encode asynchronously (toBlob) instead of blocking the main thread with
+    // toDataURL — during timeline scrubbing the sync PNG encode was a major
+    // source of jank. A render generation counter drops stale encodes.
+    const gen = ++this._renderGen;
+    this._canvas.toBlob((blob) => {
+      if (!blob || gen !== this._renderGen) return;
+      const url = URL.createObjectURL(blob);
+      try {
+        this.map.getSource('heatmap').updateImage({
+          url,
+          coordinates: boundsToCoords(bounds),
+        });
+      } catch (e) {
+        // Source not ready yet
+      }
+      // Revoke the previous frame's URL after a grace period — MapLibre
+      // fetches updateImage URLs asynchronously, so an immediate revoke
+      // could yank a URL it hasn't finished loading yet.
+      const prev = this._lastBlobUrl;
+      this._lastBlobUrl = url;
+      if (prev) setTimeout(() => URL.revokeObjectURL(prev), 5000);
+    });
   }
 
   destroy() {

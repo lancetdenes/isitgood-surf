@@ -104,8 +104,9 @@ export class SwellRenderer {
 
   setGrid(grid) {
     this.grid = grid;
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this._initParticles();
+    // Keep existing particles — positions are still valid, only the field
+    // changed. Re-seeding on every timeline scrub tick caused flashes/jank.
+    if (this.particles.length === 0) this._initParticles();
   }
 
   start() {
@@ -157,17 +158,19 @@ export class SwellRenderer {
       return;
     }
 
-    // Scale everything with zoom so visual appearance stays consistent.
-    // At zoom 5 (reference level) all values are 1x.
+    // Dash size keeps a gentle cosmetic curve, but SPEED must track the map
+    // scale: Web-Mercator pixels-per-degree doubles every zoom level, so
+    // geographic consistency needs 2^(zoom-5), not 2^((zoom-5)/3). Clamped
+    // so extremes stay usable (no frozen crests at z2, no teleporting at z12).
     const zoom = this.map.getZoom();
-    const zoomScale = Math.pow(2, (zoom - 5) / 3);  // gentle curve
+    const zoomScale = Math.pow(2, (zoom - 5) / 3);  // cosmetic (width/dash)
+    const speedScale = Math.pow(2, Math.min(Math.max(zoom - 5, -2), 3));
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
     ctx.lineCap = 'round';
 
     const halfDash = (this.dashLen * zoomScale) / 2;
-    const speedScale = zoomScale;  // slower when zoomed out, faster when zoomed in
 
     for (const p of this.particles) {
       // Ocean-only interp: returns null if any of the 4 bilinear corners is
@@ -208,7 +211,8 @@ export class SwellRenderer {
 
       // Speed scales with swell height and zoom level
       const t = Math.min(height / 5, 1);
-      const speed = (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedScale;
+      const speed = Math.min(
+        (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedScale, 6);
 
       // Advance particle position
       const pt0 = this.map.project([p.lng, p.lat]);

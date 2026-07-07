@@ -97,6 +97,40 @@ export class Grid {
   }
 
   /**
+   * Height-only variant of interpolateSwell for per-pixel rendering.
+   * Skips the direction (4× sin/cos + atan2) and period math — the heatmap
+   * only needs height, and this runs for every pixel of the raster.
+   * Returns height (number) or null under the same land-rejection rules.
+   */
+  interpolateSwellHeight(lon, lat, minH = 0.05) {
+    let fi = (lon - this.lo1) / this.dx;
+    const fj = (this.la1 - lat) / this.dy;
+    while (fi < 0) fi += this.nx;
+    while (fi >= this.nx) fi -= this.nx;
+    if (fj < 0 || fj >= this.ny - 1) return null;
+
+    const i0 = Math.floor(fi);
+    const j0 = Math.floor(fj);
+    const fx = fi - i0;
+    const fy = fj - j0;
+    const i1 = (i0 + 1) % this.nx;
+    const j1 = Math.min(j0 + 1, this.ny - 1);
+
+    const idx00 = j0 * this.nx + i0;
+    const idx10 = j0 * this.nx + i1;
+    const idx01 = j1 * this.nx + i0;
+    const idx11 = j1 * this.nx + i1;
+
+    const h = this.arrays[0];
+    if (h[idx00] < minH || h[idx10] < minH || h[idx01] < minH || h[idx11] < minH) {
+      return null;
+    }
+
+    return (1 - fx) * (1 - fy) * h[idx00] + fx * (1 - fy) * h[idx10]
+         + (1 - fx) * fy * h[idx01] + fx * fy * h[idx11];
+  }
+
+  /**
    * Single-cell land/ocean check. Uses the first-parameter array (height for
    * swell grids) and checks if the cell containing (lon, lat) has a non-zero
    * value. Land cells are stored as 0; ocean cells always have some value even
