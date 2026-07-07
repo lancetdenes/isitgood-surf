@@ -109,6 +109,39 @@
   </div>
   <div id="pumping-backdrop" class="pumping-backdrop" aria-hidden="true"></div>
 
+  <!-- Upload sheet -->
+  <div class="upload-backdrop" id="upload-backdrop" hidden></div>
+  <div class="upload-sheet" id="upload-sheet" hidden>
+    <div class="upload-head">
+      <h3>Add spot media</h3>
+      <button class="close-btn" id="upload-close">&times;</button>
+    </div>
+    <div class="upload-body">
+      <input type="file" id="upload-file" accept="image/jpeg,image/png,video/mp4,video/quicktime">
+      <div class="upload-preview" id="upload-preview"></div>
+      <div class="upload-meta">
+        <label>Captured <input type="datetime-local" id="upload-time"></label>
+        <div class="upload-stamp-tag" id="upload-stamp-tag"></div>
+      </div>
+      <div class="upload-minimap" id="upload-minimap"></div>
+      <input type="text" id="upload-caption" maxlength="140" placeholder="Caption (optional)">
+      <button class="ctrl-btn" id="upload-submit" disabled>Upload</button>
+      <div class="upload-status" id="upload-status"></div>
+    </div>
+  </div>
+
+  <!-- Sign-in modal -->
+  <div class="signin-modal" id="signin-modal" hidden>
+    <div class="signin-box">
+      <h3>Sign in to upload</h3>
+      <p>We'll email you a one-time link.</p>
+      <input type="email" id="signin-email" placeholder="you@example.com">
+      <button class="ctrl-btn" id="signin-send">Send link</button>
+      <div class="signin-status" id="signin-status"></div>
+      <button class="close-btn" id="signin-close">&times;</button>
+    </div>
+  </div>
+
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script type="module" src="js/app.js"></script>

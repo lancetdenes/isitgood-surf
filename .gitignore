@@ -25,3 +25,7 @@ data/reference/*
 # Coastline harness snapshots (regenerable PNGs + summaries)
 test/snapshots/*/
 !test/snapshots/.gitkeep
+
+# Python bytecode
+__pycache__/
+test/snapshots/report.html

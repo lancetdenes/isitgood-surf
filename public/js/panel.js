@@ -13,6 +13,7 @@ import { computeForecast } from './forecast.js';
 import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
 import { renderCompass as renderCompassSvg } from './compass-render.js';
 import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
+import { renderMediaStrip } from './media.js';
 
 // ── State ──
 
@@ -26,6 +27,13 @@ let selectedHourIdx = 0;
 export function initPanel() {
   panelEl = document.getElementById('rating-panel');
   document.getElementById('rating-close').addEventListener('click', closePanel);
+
+  // Refresh the media strip after a successful upload
+  document.addEventListener('media-uploaded', () => {
+    if (isPanelOpen()) {
+      renderMediaStrip(panelEl.querySelector('.rating-body'), currentData.lat, currentData.lon);
+    }
+  });
 }
 
 export function closePanel() {
@@ -203,6 +211,10 @@ function render() {
       Coast: GSHHG &bull; Weather: NOAA GFS
     </div>
   `;
+
+  // Spot media strip (no-ops until the media API is deployed). Cached per
+  // location inside media.js, so hour-scrub re-renders don't refetch.
+  renderMediaStrip(panelEl.querySelector('.rating-body'), lat, lon);
 
   // Mount/refresh the MapLibre mini-map for the selected-detail compass.
   // The placeholder only exists when renderSelectedDetail decided we have

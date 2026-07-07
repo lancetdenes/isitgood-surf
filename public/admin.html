@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Media admin</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { overflow: auto; padding: 20px; height: auto; }
+    .row { display: flex; gap: 12px; align-items: center; border-bottom: 1px solid var(--border); padding: 10px 0; }
+    .row img, .row video { width: 120px; height: 90px; object-fit: cover; border-radius: 6px; }
+    .row .meta { flex: 1; font-size: 12px; color: var(--text-muted); }
+    .row button { margin-left: 6px; }
+    .tabs { margin: 12px 0; display: flex; gap: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Media admin</h2>
+  <div class="tabs">
+    <button class="ctrl-btn" data-status="reported">Reported</button>
+    <button class="ctrl-btn" data-status="live">All live</button>
+  </div>
+  <div id="list">Loading…</div>
+  <script>
+    const list = document.getElementById('list');
+    async function load(status) {
+      list.textContent = 'Loading…';
+      const r = await fetch('/api/admin/media?status=' + status).catch(() => null);
+      if (!r || r.status === 403 || r.status === 401) {
+        list.textContent = 'Not authorized — sign in on the main app first.';
+        return;
+      }
+      if (!r.ok) { list.textContent = 'Error loading.'; return; }
+      const { items } = await r.json();
+      list.replaceChildren(...items.map(m => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        const media = document.createElement(m.kind === 'video' ? 'video' : 'img');
+        media.src = m.url;
+        if (m.kind === 'video') media.controls = true;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `${m.email} · ${m.stamp_source} · reports:${m.report_count} · ${new Date(m.created_at).toLocaleString()} · "${m.caption || ''}"`;
+        const rm = document.createElement('button');
+        rm.className = 'ctrl-btn'; rm.textContent = 'Remove';
+        rm.onclick = () => act({ action: 'remove', mediaId: m.id }, row);
+        const ban = document.createElement('button');
+        ban.className = 'ctrl-btn'; ban.textContent = 'Ban user';
+        ban.onclick = () => confirm('Ban ' + m.email + ' and remove all their media?') && act({ action: 'ban', userId: m.user_id }, row);
+        row.append(media, meta, rm, ban);
+        return row;
+      }));
+      if (!items.length) list.textContent = 'Nothing here.';
+    }
+    async function act(body, row) {
+      const r = await fetch('/api/admin/act', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.ok) row.remove();
+    }
+    document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => load(b.dataset.status));
+    load('reported');
+  </script>
+</body>
+</html>
