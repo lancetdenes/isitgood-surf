@@ -145,21 +145,20 @@ export class WindRenderer {
       return;
     }
 
-    // Line width keeps a gentle cosmetic curve, but SPEED must track the
-    // map scale: Web-Mercator pixels-per-degree doubles every zoom level,
-    // so geographic consistency needs 2^(zoom-5), not 2^((zoom-5)/3).
-    // The exponent is clamped so extremes stay usable: below z3 particles
-    // would freeze, above z8 they would teleport.
+    // Line width keeps a gentle cosmetic curve with zoom, but SPEED is
+    // constant in screen pixels: any zoom factor here makes the flow feel
+    // faster or slower as you zoom, which reads as a glitch. Perceived
+    // speed differences should come from the wind itself (per-particle
+    // magnitude factor below), not from the zoom level.
     const zoom = this.map.getZoom();
     const zoomScale = Math.pow(2, (zoom - 5) / 3);
-    const speedZoom = Math.pow(2, Math.min(Math.max(zoom - 5, -2), 3));
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
     ctx.lineCap = 'round';
     ctx.beginPath();
 
-    const frameSpeed = this.speed * speedZoom;
+    const frameSpeed = this.speed;
 
     for (const p of this.particles) {
       const wind = this.grid.interpolate(p.lng, p.lat);
@@ -186,7 +185,7 @@ export class WindRenderer {
       // (10 m/s = reference) so gales visibly outrun light breezes.
       const nx = u / speed;
       const ny = v / speed;
-      const step = Math.min(frameSpeed * Math.max(0.15, Math.min(speed / 10, 2.2)), 8);
+      const step = frameSpeed * Math.max(0.15, Math.min(speed / 10, 2.2));
 
       const pt0 = this.map.project([p.lng, p.lat]);
       const px1 = pt0.x + nx * step;

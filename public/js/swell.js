@@ -158,13 +158,12 @@ export class SwellRenderer {
       return;
     }
 
-    // Dash size keeps a gentle cosmetic curve, but SPEED must track the map
-    // scale: Web-Mercator pixels-per-degree doubles every zoom level, so
-    // geographic consistency needs 2^(zoom-5), not 2^((zoom-5)/3). Clamped
-    // so extremes stay usable (no frozen crests at z2, no teleporting at z12).
+    // Dash size keeps a gentle cosmetic curve with zoom, but SPEED is
+    // constant in screen pixels — zoom-scaled speed reads as the animation
+    // glitching faster/slower while zooming. Wave height alone drives the
+    // speed differences (below).
     const zoom = this.map.getZoom();
     const zoomScale = Math.pow(2, (zoom - 5) / 3);  // cosmetic (width/dash)
-    const speedScale = Math.pow(2, Math.min(Math.max(zoom - 5, -2), 3));
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
@@ -209,10 +208,9 @@ export class SwellRenderer {
       const dx = Math.sin(rad);
       const dy = -Math.cos(rad);  // screen Y is inverted
 
-      // Speed scales with swell height and zoom level
+      // Speed scales with swell height only — constant across zoom levels
       const t = Math.min(height / 5, 1);
-      const speed = Math.min(
-        (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedScale, 6);
+      const speed = this.baseSpeed + t * (this.maxSpeed - this.baseSpeed);
 
       // Advance particle position
       const pt0 = this.map.project([p.lng, p.lat]);
