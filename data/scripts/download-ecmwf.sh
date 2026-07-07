@@ -27,7 +27,8 @@ else
   DATE=$(echo "$NOW_UTC" | cut -c1-8)
   HOUR=$(echo "$NOW_UTC" | cut -c9-10)
 
-  AVAIL_HOUR=$((HOUR - 8))
+  # 10# forces base-10: "08"/"09" would otherwise be parsed as invalid octal.
+  AVAIL_HOUR=$((10#$HOUR - 8))
   if [ $AVAIL_HOUR -lt 0 ]; then
     AVAIL_HOUR=$((AVAIL_HOUR + 24))
     DATE=$(date -u -v-1d +%Y%m%d 2>/dev/null || date -u -d "yesterday" +%Y%m%d)
@@ -47,25 +48,29 @@ echo "Output: ${GRIB_DIR}"
 echo ""
 
 ECMWF_BASE="https://data.ecmwf.int/forecasts/${DATE}/${CYCLE}z/ifs/0p25/oper"
-WAM_BASE="https://data.ecmwf.int/forecasts/${DATE}/${CYCLE}z/wam/0p25/oper"
+# Wave data moved from the standalone WAM model (wam/0p25/oper, files
+# "-oper-fc") into the IFS tree (ifs/0p25/wave, files "-wave-fc").
+WAVE_BASE="https://data.ecmwf.int/forecasts/${DATE}/${CYCLE}z/ifs/0p25/wave"
 
 # ── Helper: download specific fields via byte-range from JSON index ──
-download_wind_fields() {
+download_fields() {
   local FULL_URL="$1"
   local INDEX_URL="$2"
   local OUTPUT="$3"
+  local PARAMS="$4"   # comma-separated shortNames, e.g. "10u,10v"
 
-  # Fetch index and extract 10u/10v byte ranges
+  # Fetch index and extract byte ranges for the requested params
   local RANGES
   RANGES=$(curl -sf "$INDEX_URL" | python3 -c "
 import sys, json
+wanted = set(sys.argv[1].split(','))
 ranges = []
 for line in sys.stdin:
     line = line.strip()
     if not line:
         continue
     rec = json.loads(line)
-    if rec.get('param') in ('10u', '10v'):
+    if rec.get('param') in wanted:
         start = rec['_offset']
         end = start + rec['_length'] - 1
         ranges.append(f'{start}-{end}')
@@ -73,9 +78,16 @@ if ranges:
     print(','.join(ranges))
 else:
     sys.exit(1)
-" 2>/dev/null) || return 1
+" "$PARAMS" 2>/dev/null) || return 1
 
-  curl -sf -H "Range: bytes=${RANGES}" -o "$OUTPUT" "$FULL_URL"
+  # Download to a temp file, then move into place — a failed transfer must
+  # not leave a partial file that later runs treat as cached.
+  if curl -sf -H "Range: bytes=${RANGES}" -o "${OUTPUT}.tmp" "$FULL_URL"; then
+    mv "${OUTPUT}.tmp" "$OUTPUT"
+  else
+    rm -f "${OUTPUT}.tmp"
+    return 1
+  fi
 }
 
 # Forecast hours: 0 to 168 every 3 hours
@@ -89,14 +101,13 @@ for FHR in $HOURS; do
   echo -n "  [${COUNT}/${TOTAL}] f${FHRP}: "
 
   STEP="${FHR}h"
-  FILE_BASE="${DATE}${CYCLE}0000-${STEP}-oper-fc"
+  ATMO_BASE="${DATE}${CYCLE}0000-${STEP}-oper-fc"
+  WAVE_FILE_BASE="${DATE}${CYCLE}0000-${STEP}-wave-fc"
 
   # --- Wind (10u, 10v only — ~1.7 MB via byte-range) ---
   ATMO_FILE="${GRIB_DIR}/ecmwf_atmo_f${FHRP}.grib2"
   if [ ! -f "$ATMO_FILE" ]; then
-    FULL_URL="${ECMWF_BASE}/${FILE_BASE}.grib2"
-    INDEX_URL="${ECMWF_BASE}/${FILE_BASE}.index"
-    if download_wind_fields "$FULL_URL" "$INDEX_URL" "$ATMO_FILE"; then
+    if download_fields "${ECMWF_BASE}/${ATMO_BASE}.grib2" "${ECMWF_BASE}/${ATMO_BASE}.index" "$ATMO_FILE" "10u,10v"; then
       echo -n "wind ✓  "
     else
       echo -n "wind ✗  "
@@ -105,11 +116,14 @@ for FHR in $HOURS; do
     echo -n "wind (cached)  "
   fi
 
-  # --- Wave data (separate WAM model — already small files) ---
+  # --- Wave data (swh/mwd/pp1d only — ~2.7 MB via byte-range) ---
   WAVE_FILE="${GRIB_DIR}/ecmwf_wave_f${FHRP}.grib2"
   if [ ! -f "$WAVE_FILE" ]; then
-    WAVE_URL="${WAM_BASE}/${FILE_BASE}.grib2"
-    curl -sf -o "$WAVE_FILE" "$WAVE_URL" && echo "wave ✓" || echo "wave ✗"
+    if download_fields "${WAVE_BASE}/${WAVE_FILE_BASE}.grib2" "${WAVE_BASE}/${WAVE_FILE_BASE}.index" "$WAVE_FILE" "swh,mwd,pp1d"; then
+      echo "wave ✓"
+    else
+      echo "wave ✗"
+    fi
   else
     echo "wave (cached)"
   fi

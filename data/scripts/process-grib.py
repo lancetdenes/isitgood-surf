@@ -149,32 +149,42 @@ def process_gfs_wave(grib_path, out_path):
     height = direction = period = None
     lats = lons = None
 
-    for short_name, target in [('swh', 'height'), ('dirpw', 'direction'), ('perpw', 'period')]:
-        try:
-            ds = xr.open_dataset(grib_path, engine='cfgrib',
-                                 backend_kwargs={'filter_by_keys': {'shortName': short_name}})
-            # Get the first (only) data variable
-            var_name = list(ds.data_vars)[0]
-            data = np.nan_to_num(ds[var_name].values, nan=0.0)
+    # GFS-Wave uses dirpw/perpw; ECMWF IFS wave uses mwd/pp1d (or mwp).
+    candidates = [
+        (('swh',), 'height'),
+        (('dirpw', 'mwd'), 'direction'),
+        (('perpw', 'pp1d', 'mwp'), 'period'),
+    ]
+    for short_names, target in candidates:
+        for short_name in short_names:
+            try:
+                ds = xr.open_dataset(grib_path, engine='cfgrib',
+                                     backend_kwargs={'filter_by_keys': {'shortName': short_name}})
+                # Get the first (only) data variable
+                var_name = list(ds.data_vars)[0]
+                data = np.nan_to_num(ds[var_name].values, nan=0.0)
 
-            # Ensure 2D
-            if data.ndim > 2:
-                data = data[0]
+                # Ensure 2D
+                if data.ndim > 2:
+                    data = data[0]
 
-            if lats is None:
-                lats = ds.latitude.values
-                lons = ds.longitude.values
+                if lats is None:
+                    lats = ds.latitude.values
+                    lons = ds.longitude.values
 
-            if target == 'height':
-                height = data
-            elif target == 'direction':
-                direction = data
-            elif target == 'period':
-                period = data
+                if target == 'height':
+                    height = data
+                elif target == 'direction':
+                    direction = data
+                elif target == 'period':
+                    period = data
 
-            ds.close()
-        except Exception as e:
-            print(f"    Warning: Could not read {short_name} from {grib_path}: {e}")
+                ds.close()
+                break
+            except Exception:
+                continue
+        else:
+            print(f"    Warning: Could not read {'/'.join(short_names)} from {grib_path}")
 
     if height is None:
         # Fallback: try reading without filter and pick by variable name

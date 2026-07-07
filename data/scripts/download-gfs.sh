@@ -29,8 +29,9 @@ else
   DATE=$(echo "$NOW_UTC" | cut -c1-8)
   HOUR=$(echo "$NOW_UTC" | cut -c9-10)
 
-  # Round down to nearest available cycle (accounting for ~5hr delay)
-  AVAIL_HOUR=$((HOUR - 5))
+  # Round down to nearest available cycle (accounting for ~5hr delay).
+  # 10# forces base-10: "08"/"09" would otherwise be parsed as invalid octal.
+  AVAIL_HOUR=$((10#$HOUR - 5))
   if [ $AVAIL_HOUR -lt 0 ]; then
     AVAIL_HOUR=$((AVAIL_HOUR + 24))
     DATE=$(date -u -v-1d +%Y%m%d 2>/dev/null || date -u -d "yesterday" +%Y%m%d)
@@ -54,6 +55,18 @@ echo ""
 NOMADS_BASE="https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 WAVE_BASE="https://nomads.ncep.noaa.gov/cgi-bin/filter_gfswave.pl"
 
+# Download to a temp file, then move into place — a failed transfer must not
+# leave a partial file that later runs treat as cached.
+fetch() {
+  local URL="$1" OUTPUT="$2"
+  if curl -sf -o "${OUTPUT}.tmp" "$URL"; then
+    mv "${OUTPUT}.tmp" "$OUTPUT"
+  else
+    rm -f "${OUTPUT}.tmp"
+    return 1
+  fi
+}
+
 # Forecast hours: 0 to 168 every 3 hours
 HOURS=$(seq 0 3 168)
 TOTAL=$(echo "$HOURS" | wc -w | tr -d ' ')
@@ -68,7 +81,7 @@ for FHR in $HOURS; do
   WIND_FILE="${GRIB_DIR}/gfs_wind_f${FHRP}.grib2"
   if [ ! -f "$WIND_FILE" ]; then
     WIND_URL="${NOMADS_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fatmos&file=gfs.t${CYCLE}z.pgrb2.0p25.f${FHRP}&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on"
-    curl -sf -o "$WIND_FILE" "$WIND_URL" && echo -n "wind ✓  " || echo -n "wind ✗  "
+    fetch "$WIND_URL" "$WIND_FILE" && echo -n "wind ✓  " || echo -n "wind ✗  "
   else
     echo -n "wind (cached)  "
   fi
@@ -77,7 +90,7 @@ for FHR in $HOURS; do
   WAVE_FILE="${GRIB_DIR}/gfs_wave_f${FHRP}.grib2"
   if [ ! -f "$WAVE_FILE" ]; then
     WAVE_URL="${WAVE_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fwave%2Fgridded&file=gfswave.t${CYCLE}z.global.0p25.f${FHRP}.grib2&var_HTSGW=on&var_DIRPW=on&var_PERPW=on"
-    curl -sf -o "$WAVE_FILE" "$WAVE_URL" && echo "wave ✓" || echo "wave ✗"
+    fetch "$WAVE_URL" "$WAVE_FILE" && echo "wave ✓" || echo "wave ✗"
   else
     echo "wave (cached)"
   fi
@@ -98,7 +111,7 @@ for FHR in $EXT_HOURS; do
   WIND_FILE="${GRIB_DIR}/gfs_wind_f${FHRP}.grib2"
   if [ ! -f "$WIND_FILE" ]; then
     WIND_URL="${NOMADS_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fatmos&file=gfs.t${CYCLE}z.pgrb2.0p25.f${FHRP}&var_UGRD=on&var_VGRD=on&lev_10_m_above_ground=on"
-    curl -sf -o "$WIND_FILE" "$WIND_URL" && echo -n "wind ✓  " || echo -n "wind ✗  "
+    fetch "$WIND_URL" "$WIND_FILE" && echo -n "wind ✓  " || echo -n "wind ✗  "
   else
     echo -n "wind (cached)  "
   fi
@@ -106,7 +119,7 @@ for FHR in $EXT_HOURS; do
   WAVE_FILE="${GRIB_DIR}/gfs_wave_f${FHRP}.grib2"
   if [ ! -f "$WAVE_FILE" ]; then
     WAVE_URL="${WAVE_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fwave%2Fgridded&file=gfswave.t${CYCLE}z.global.0p25.f${FHRP}.grib2&var_HTSGW=on&var_DIRPW=on&var_PERPW=on"
-    curl -sf -o "$WAVE_FILE" "$WAVE_URL" && echo "wave ✓" || echo "wave ✗"
+    fetch "$WAVE_URL" "$WAVE_FILE" && echo "wave ✓" || echo "wave ✗"
   else
     echo "wave (cached)"
   fi
