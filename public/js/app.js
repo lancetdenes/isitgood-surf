@@ -53,6 +53,18 @@ class App {
       this.wind = new WindRenderer(document.getElementById('wind-canvas'), this.map);
       this.swell = new SwellRenderer(document.getElementById('swell-canvas'), this.map);
 
+      // Flow-speed zoom-feel tuning: ?flowexp=0.25 in the URL, or
+      // __flowTune(0.25) in the console. 0 = constant screen speed,
+      // 0.33 = old steep curve. Live-adjustable to find the right feel.
+      const tune = (exp) => {
+        this.wind.speedZoomExp = exp;
+        this.swell.speedZoomExp = exp;
+        console.log(`flow speedZoomExp = ${exp}`);
+      };
+      window.__flowTune = tune;
+      const flowExp = parseFloat(new URLSearchParams(location.search).get('flowexp'));
+      if (Number.isFinite(flowExp)) tune(flowExp);
+
       initUI(this);
       initPanel();
       initPumping(this);

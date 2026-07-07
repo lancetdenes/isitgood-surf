@@ -19,7 +19,11 @@ export class WindRenderer {
     // ── Tuning to match Windy screenshots ──
     this.particleDensity = 0.45;  // per 1000 screen px
     this.maxAge = 40;             // short-lived
-    this.speed = 0.7;             // constant px/frame
+    this.speed = 0.7;             // reference px/frame at zoom 5, 10 m/s wind
+    // Perceptual zoom-speed exponent: 0 = constant screen speed (feels too
+    // fast zoomed out, too slow zoomed in), 1/3 = the old curve (felt too
+    // fast zoomed in). Tunable live via window.__flowTune(exp) or ?flowexp=.
+    this.speedZoomExp = 0.18;
     this.fadeOpacity = 0.86;      // fast fade → very short tails
     this.lineWidth = 1.0;
     this.color = 'rgba(255, 255, 255, 0.65)';
@@ -145,20 +149,20 @@ export class WindRenderer {
       return;
     }
 
-    // Line width keeps a gentle cosmetic curve with zoom, but SPEED is
-    // constant in screen pixels: any zoom factor here makes the flow feel
-    // faster or slower as you zoom, which reads as a glitch. Perceived
-    // speed differences should come from the wind itself (per-particle
-    // magnitude factor below), not from the zoom level.
+    // Line width keeps a gentle cosmetic curve with zoom. Speed follows a
+    // soft perceptual curve (see speedZoomExp above), clamped to ±few
+    // levels so the extremes stay usable.
     const zoom = this.map.getZoom();
     const zoomScale = Math.pow(2, (zoom - 5) / 3);
+    const zd = Math.min(Math.max(zoom - 5, -3), 4);
+    const speedZoom = Math.pow(2, zd * this.speedZoomExp);
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
     ctx.lineCap = 'round';
     ctx.beginPath();
 
-    const frameSpeed = this.speed;
+    const frameSpeed = this.speed * speedZoom;
 
     for (const p of this.particles) {
       const wind = this.grid.interpolate(p.lng, p.lat);

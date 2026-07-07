@@ -21,8 +21,10 @@ export class SwellRenderer {
     // ── Tuning ──
     this.particleDensity = 0.55;   // base density (before swell-height boost)
     this.maxAge = 30;              // shorter life → less travel distance
-    this.baseSpeed = 0.2;          // calm-swell speed (px/frame)
+    this.baseSpeed = 0.2;          // calm-swell speed (px/frame at zoom 5)
     this.maxSpeed = 0.55;          // big-swell speed
+    // Perceptual zoom-speed exponent — see wind.js; tunable via __flowTune()
+    this.speedZoomExp = 0.18;
     this.dashLen = 6;              // px length of each dash
     this.fadeOpacity = 0.85;       // faster fade
     this.lineWidth = 1.4;
@@ -158,12 +160,12 @@ export class SwellRenderer {
       return;
     }
 
-    // Dash size keeps a gentle cosmetic curve with zoom, but SPEED is
-    // constant in screen pixels — zoom-scaled speed reads as the animation
-    // glitching faster/slower while zooming. Wave height alone drives the
-    // speed differences (below).
+    // Dash size keeps a gentle cosmetic curve with zoom; speed follows a
+    // soft perceptual curve (see speedZoomExp), clamped at the extremes.
     const zoom = this.map.getZoom();
     const zoomScale = Math.pow(2, (zoom - 5) / 3);  // cosmetic (width/dash)
+    const zd = Math.min(Math.max(zoom - 5, -3), 4);
+    const speedZoom = Math.pow(2, zd * this.speedZoomExp);
 
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.lineWidth * zoomScale;
@@ -208,9 +210,9 @@ export class SwellRenderer {
       const dx = Math.sin(rad);
       const dy = -Math.cos(rad);  // screen Y is inverted
 
-      // Speed scales with swell height only — constant across zoom levels
+      // Speed scales with swell height, softly adjusted by zoom
       const t = Math.min(height / 5, 1);
-      const speed = this.baseSpeed + t * (this.maxSpeed - this.baseSpeed);
+      const speed = (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedZoom;
 
       // Advance particle position
       const pt0 = this.map.project([p.lng, p.lat]);
