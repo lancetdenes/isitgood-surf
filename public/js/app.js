@@ -13,11 +13,11 @@ import { initMap, enhanceMapStyle } from './map.js';
 import { WindRenderer } from './wind.js';
 import { SwellRenderer } from './swell.js';
 import { HeatmapRenderer } from './heatmap.js';
-import { loadGrid } from './grid.js';
+import { GridStore } from './grid-store.js';
 import { initUI, updateLegendVisibility, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
-import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
+import { setKDBush } from './coastline-hires.js';
 
 setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
@@ -69,9 +69,6 @@ class App {
       initPanel();
       initPumping(this);
 
-      // Load coastline data in background
-      loadCoastline().catch(e => console.warn('Coastline load failed:', e));
-
       this.map.on('click', (e) => this._onMapClick(e));
 
       await this._loadLatestRun();
@@ -81,6 +78,7 @@ class App {
   async _loadLatestRun() {
     setStatus('Finding latest data...');
     invalidatePumpingCache();
+    this._store.reset(); // drop queued prefetches from a previous run/model
 
     const config = window.SURF_CONFIG || {};
     const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
@@ -120,94 +118,164 @@ class App {
     }
   }
 
-  // Client-side grid cache — avoids re-downloading when scrubbing timeline
-  _gridCache = new Map();
+  // Decoded-grid cache + prioritized fetch/decode pipeline (Web Worker).
+  // `_gridCache` aliases the store's LRU map for dev tooling/back-compat.
+  _store = new GridStore();
+  _gridCache = this._store.cache;
   _loadSeq = 0;
 
-  async _cachedLoadGrid(url) {
-    if (this._gridCache.has(url)) return this._gridCache.get(url);
-    const grid = await loadGrid(url).catch(() => null);
-    if (grid) this._gridCache.set(url, grid);
-    return grid;
+  _cachedLoadGrid(url, priority = 0) {
+    return this._store.load(url, priority);
+  }
+
+  _windUrl(hour) {
+    return `${this.dataPath}/wind_f${String(hour).padStart(3, '0')}.bin`;
+  }
+
+  _swellUrl(hour) {
+    return `${this.dataPath}/swell_f${String(hour).padStart(3, '0')}.bin`;
+  }
+
+  /** Apply whichever grids are provided to the renderers, then refresh layers. */
+  _applyGrids(windGrid, swellGrid) {
+    if (windGrid) {
+      this.windGrid = windGrid;
+      this.wind.setGrid(windGrid);
+    }
+    if (swellGrid) {
+      this.swellGrid = swellGrid;
+      this.swell.setGrid(swellGrid);
+    }
+    this._updateVisibility();
   }
 
   async _loadHour(hour) {
     if (!this.dataPath) return;
 
     const fhr = String(hour).padStart(3, '0');
-    setStatus(`Loading f${fhr}...`);
 
     // Latest-wins: rapid scrubbing spawns overlapping loads; only the most
     // recently requested hour may apply its grids when it resolves.
     const seq = ++this._loadSeq;
 
+    // Re-center the background prefetcher on the new hour.
+    this._schedulePrefetch(hour);
+
+    // ── Instant path — serve from the decoded cache, no await ──
+    const cachedWind = this._store.peek(this._windUrl(hour));
+    const cachedSwell = this._peekSwellResolved(hour);
+    if (cachedWind && cachedSwell) {
+      this._applyGrids(cachedWind, cachedSwell);
+      setStatus(`f${fhr} loaded`);
+      (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
+      this._kickCoastlineLoad();
+      return;
+    }
+
+    // ── Never leave the map stale while the network runs: render the
+    //    nearest already-decoded frame right now, swap when exact arrives ──
+    setStatus(`Loading f${fhr}...`);
+    if (!cachedWind || !cachedSwell) {
+      const nearHour = this._nearestCachedHour(hour);
+      if (nearHour !== null) {
+        this._applyGrids(
+          cachedWind || this._store.peek(this._windUrl(nearHour)),
+          cachedSwell || this._store.peek(this._swellUrl(nearHour)),
+        );
+      }
+    }
+
     try {
       const [windGrid, swellGrid] = await Promise.all([
-        this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`),
+        this._store.load(this._windUrl(hour), -1),
         this._loadSwellWithFallback(hour),
       ]);
 
       if (seq !== this._loadSeq) return;
 
-      if (windGrid) {
-        this.windGrid = windGrid;
-        this.wind.setGrid(windGrid);
-      }
-      if (swellGrid) {
-        this.swellGrid = swellGrid;
-        this.swell.setGrid(swellGrid);
-      }
-
-      this._updateVisibility();
+      this._applyGrids(windGrid, swellGrid);
       setStatus(`f${fhr} loaded`);
-
-      // Preload next 2 hours immediately, all hours in background
-      this._preload(hour);
-      this._preloadAll();
+      (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
+      this._kickCoastlineLoad();
     } catch (err) {
       console.error('Load error:', err);
       setStatus('Error loading forecast hour');
     }
   }
 
-  /** Preload upcoming hours so animation/scrubbing is instant */
-  _preload(currentHour) {
-    for (const offset of [3, 6]) {
-      const h = currentHour + offset;
-      if (h > 168) continue;
-      const fhr = String(h).padStart(3, '0');
-      this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`);
-      this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
+  /**
+   * Start the (14.5 MB) hires coastline download once the first grids are
+   * on screen so it doesn't compete with the initial heatmap for bandwidth.
+   * Clicking the map earlier still works: loadCoastline() kicks the same
+   * shared fetch on demand.
+   */
+  _kickCoastlineLoad() {
+    if (this._coastlineKicked) return;
+    this._coastlineKicked = true;
+    const start = () => loadCoastline().catch(e => console.warn('Coastline load failed:', e));
+    if ('requestIdleCallback' in window) requestIdleCallback(start, { timeout: 3000 });
+    else setTimeout(start, 500);
+  }
+
+  /**
+   * Enqueue every forecast hour, prioritized by distance from the current
+   * hour (slight forward bias — play/scrub usually moves forward). The
+   * store dedups: already-cached/pending URLs are a no-op apart from a
+   * possible priority bump, so calling this on every scrub tick is cheap
+   * and keeps the pool always working on the most useful frames.
+   */
+  _schedulePrefetch(centerHour) {
+    if (!this.dataPath) return;
+    for (let h = 0; h <= 168; h += 3) {
+      const d = h - centerHour;
+      const priority = d >= 0 ? d : -d + 1;
+      this._store.load(this._windUrl(h), priority);
+      this._store.load(this._swellUrl(h), priority);
     }
   }
 
-  /** Preload ALL hours in background (called after first load) */
-  _preloadAll() {
-    if (this._preloadStarted || !this.dataPath) return;
-    this._preloadStarted = true;
-    const load = async () => {
-      for (let h = 0; h <= 168; h += 3) {
-        const fhr = String(h).padStart(3, '0');
-        await this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`);
-        await this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
+  /** Nearest hour (by |Δh|) whose wind grid is already decoded, or null. */
+  _nearestCachedHour(hour) {
+    for (let d = 3; d <= 168; d += 3) {
+      for (const h of [hour - d, hour + d]) {
+        if (h < 0 || h > 168) continue;
+        if (this._store.has(this._windUrl(h))) return h;
       }
-      console.log('All forecast hours preloaded');
-    };
-    // Start after a short delay so initial render isn't blocked
-    setTimeout(load, 2000);
+    }
+    return null;
+  }
+
+  /**
+   * Synchronous, fully-resolved swell lookup for the instant scrub path.
+   * Returns the exact hour's grid, or — ONLY when the exact hour is
+   * negative-cached (known missing) — the nearest cached ±3/±6h neighbor,
+   * mirroring _loadSwellWithFallback. Returns null when the answer can't be
+   * determined without the network (caller falls through to the async path).
+   */
+  _peekSwellResolved(hour) {
+    const exact = this._store.peek(this._swellUrl(hour));
+    if (exact) return exact;
+    if (!this._store.isNegative(this._swellUrl(hour))) return null;
+    for (const offset of [3, -3, 6, -6]) {
+      const nearby = hour + offset;
+      if (nearby < 0 || nearby > 168) continue;
+      const url = this._swellUrl(nearby);
+      const fallback = this._store.peek(url);
+      if (fallback) return fallback;
+      if (!this._store.isNegative(url)) return null;
+    }
+    return null;
   }
 
   /** Try loading the exact swell hour; if missing, try the nearest ±3h step. */
   async _loadSwellWithFallback(hour) {
-    const fhr = String(hour).padStart(3, '0');
-    const grid = await this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
+    const grid = await this._store.load(this._swellUrl(hour), -1);
     if (grid) return grid;
 
     for (const offset of [3, -3, 6, -6]) {
       const nearby = hour + offset;
       if (nearby < 0) continue;
-      const nearFhr = String(nearby).padStart(3, '0');
-      const fallback = await this._cachedLoadGrid(`${this.dataPath}/swell_f${nearFhr}.bin`);
+      const fallback = await this._store.load(this._swellUrl(nearby), -1);
       if (fallback) return fallback;
     }
     return null;
@@ -298,10 +366,9 @@ class App {
 }
 
 const app = new App();
+// Dev/measurement hook — used by verify/measure.js (Playwright harness).
+window.__app = app;
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');
-});
-loadHiresCoastline().catch(err => {
-  console.warn('Failed to load hires coastline; continuing with Natural Earth:', err);
 });

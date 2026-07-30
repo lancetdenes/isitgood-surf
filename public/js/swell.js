@@ -6,6 +6,8 @@
  * to distinguish from the white wind dashes.
  */
 
+import { makeFrameProjector } from './fast-project.js';
+
 export class SwellRenderer {
   constructor(canvas, map) {
     this.canvas = canvas;
@@ -173,6 +175,11 @@ export class SwellRenderer {
 
     const halfDash = (this.dashLen * zoomScale) / 2;
 
+    // One calibrated projector per frame — avoids a map.project +
+    // map.unproject (matrix math + allocations) per particle.
+    const proj = makeFrameProjector(this.map);
+    const pt = { x: 0, y: 0 };
+
     for (const p of this.particles) {
       // Ocean-only interp: returns null if any of the 4 bilinear corners is
       // land, which keeps particles from swimming onto the coastline and
@@ -215,13 +222,11 @@ export class SwellRenderer {
       const speed = (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedZoom;
 
       // Advance particle position
-      const pt0 = this.map.project([p.lng, p.lat]);
-      const cx = pt0.x + dx * speed;
-      const cy = pt0.y + dy * speed;
+      proj.project(p.lng, p.lat, pt);
+      const cx = pt.x + dx * speed;
+      const cy = pt.y + dy * speed;
 
-      const geo1 = this.map.unproject([cx, cy]);
-      p.lng = geo1.lng;
-      p.lat = geo1.lat;
+      proj.unproject(cx, cy, p); // writes p.lng / p.lat in place
       p.age++;
 
       // Draw a dash perpendicular to the travel direction (like a wave crest)

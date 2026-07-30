@@ -1,7 +1,7 @@
 {
   "name": "crowdsurf-v3",
   "version": "3.0.0",
-  "description": "CrowdSurf \u2014 Windy-style surf forecast from locally-hosted GFS/ECMWF data",
+  "description": "CrowdSurf — Windy-style surf forecast from locally-hosted GFS/ECMWF data",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -35,6 +35,8 @@
     "@resvg/resvg-js": "^2.6.2",
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@turf/helpers": "^7.3.5",
-    "kdbush": "^4.0.2"
+    "kdbush": "^4.0.2",
+    "maplibre-gl": "^4.7.1",
+    "playwright-core": "^1.62.0"
   }
 }
