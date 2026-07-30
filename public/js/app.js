@@ -24,6 +24,7 @@ import { setKDBush } from './coastline-hires.js';
 setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
 import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
+import { initBuoys, buoyFeatureAt, closeBuoyPanel } from './buoys.js';
 
 class App {
   constructor() {
@@ -79,6 +80,7 @@ class App {
       initUI(this);
       initPanel();
       initPumping(this);
+      initBuoys(this);
 
       this.map.on('click', (e) => this._onMapClick(e));
 
@@ -541,8 +543,14 @@ class App {
   }
 
   async _onMapClick(e) {
+    // Buoy clicks are handled by the buoy layer — don't also open the
+    // rating panel underneath it.
+    if (buoyFeatureAt(e)) return;
+
     const { lng, lat } = e.lngLat;
     if (!this.dataPath) return;
+
+    closeBuoyPanel();
 
     if (this.marker) this.marker.remove();
     this.marker = new maplibregl.Marker({ color: '#a855f7' })

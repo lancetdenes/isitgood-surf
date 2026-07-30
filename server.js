@@ -394,6 +394,33 @@ function detectCoastFromGrid(grid, lon, lat) {
   return { coastBearing, seawardDir, offshoreDir };
 }
 
+// --- API: NDBC buoys (mirrors the Vercel functions in api/buoys/*.mjs) ---
+// The handlers are plain (req, res) functions wrapped by route(), so Express
+// can mount them directly. Local dev tries live NDBC first (server-side fetch
+// has no CORS constraint); when offline it falls back to the test fixtures.
+if (!process.env.NDBC_FIXTURE_DIR) {
+  process.env.NDBC_FIXTURE_DIR = path.join(__dirname, 'api', '_lib', 'test', 'fixtures', 'ndbc');
+}
+
+const buoyHandlers = {}; // name -> handler (lazy ESM import, CommonJS host)
+function buoyRoute(name) {
+  return async (req, res) => {
+    try {
+      if (!buoyHandlers[name]) {
+        buoyHandlers[name] = (await import(`./api/buoys/${name}.mjs`)).default;
+      }
+      await buoyHandlers[name](req, res);
+    } catch (err) {
+      console.error(`buoys/${name} failed:`, err);
+      res.status(500).json({ error: 'internal' });
+    }
+  };
+}
+
+app.get('/api/buoys/stations', buoyRoute('stations'));
+app.get('/api/buoys/obs', buoyRoute('obs'));
+app.get('/api/buoys/spectrum', buoyRoute('spectrum'));
+
 // --- Scheduled data updates ---
 
 let updateRunning = false;
