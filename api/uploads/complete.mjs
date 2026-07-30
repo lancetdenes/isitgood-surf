@@ -8,7 +8,10 @@ import { spotNameFor } from '../_lib/spots.mjs';
 
 async function readExifFromR2(key) {
   const buf = await getObjectBuffer(key, 4 * 1024 * 1024);   // EXIF lives in the first bytes
-  const data = await exifr.parse(buf, { gps: true, pick: ['DateTimeOriginal', 'latitude', 'longitude'] });
+  // NOTE: per-segment pick, not a global pick array — a global
+  // pick: ['latitude'] silently drops the GPS block before exifr converts
+  // coordinates, so GPS would always come back undefined.
+  const data = await exifr.parse(buf, { exif: ['DateTimeOriginal'], gps: true });
   if (!data) return null;
   return {
     lat: data.latitude ?? null,
