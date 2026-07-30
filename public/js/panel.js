@@ -28,6 +28,24 @@ export function initPanel() {
   panelEl = document.getElementById('rating-panel');
   document.getElementById('rating-close').addEventListener('click', closePanel);
 
+  // Delegated clicks for hour/day selection — survives partial re-renders
+  // (updateSelection patches the DOM in place instead of rebuilding it).
+  panelEl.addEventListener('click', (e) => {
+    if (!currentData) return;
+    const hourEl = e.target.closest('[data-hour-idx]');
+    if (hourEl) {
+      selectedHourIdx = parseInt(hourEl.dataset.hourIdx);
+      updateSelection(false);
+      return;
+    }
+    const dayEl = e.target.closest('[data-day-idx]');
+    if (dayEl) {
+      selectedDayIdx = parseInt(dayEl.dataset.dayIdx);
+      selectedHourIdx = 0;
+      updateSelection(true);
+    }
+  });
+
   // Refresh the media strip after a successful upload
   document.addEventListener('media-uploaded', () => {
     if (isPanelOpen()) {
@@ -39,6 +57,7 @@ export function initPanel() {
 export function closePanel() {
   panelEl.classList.remove('open');
   currentData = null;
+  clearTimeout(_syncTimer);
 }
 
 /** Check if panel is currently open */
@@ -53,11 +72,26 @@ export function updatePanelSpotName(name) {
   if (el) el.textContent = name;
 }
 
-/** Update the panel's selected hour to match the slider position */
+/**
+ * Update the panel's selected hour to match the slider position.
+ *
+ * Runs on a short trailing debounce so timeline scrubbing never pays for
+ * panel DOM work on the critical path — the map layers update every tick,
+ * the panel catches up when the slider settles. The update itself is an
+ * in-place DOM patch (updateSelection), so the mini-map survives.
+ */
+let _syncTimer = null;
 export function syncPanelHour(sliderHour) {
   if (!currentData || !currentData.hours.length) return;
-  _selectClosestHour(sliderHour);
-  render();
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => {
+    if (!currentData) return;
+    const prevDay = selectedDayIdx;
+    const prevHour = selectedHourIdx;
+    _selectClosestHour(sliderHour);
+    if (selectedDayIdx === prevDay && selectedHourIdx === prevHour) return;
+    updateSelection(selectedDayIdx !== prevDay);
+  }, 120);
 }
 
 /** Find the day/hour indices closest to a given forecast hour */
@@ -224,19 +258,77 @@ function render() {
     mountMapCompass(slotEl.dataset.slot, coast);
   }
 
-  // Wire up click handlers
-  panelEl.querySelectorAll('[data-hour-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      selectedHourIdx = parseInt(el.dataset.hourIdx);
-      render();
+  // Click handling is delegated (see initPanel) — nothing to wire here.
+}
+
+/**
+ * Patch the already-rendered panel for a new selected day/hour WITHOUT
+ * rebuilding innerHTML. Keeping the DOM alive means the mini-map MapLibre
+ * instance survives (no new WebGL context / style fetch per timeline tick)
+ * and scrubbing does a fraction of the DOM work.
+ *
+ * @param {boolean} dayChanged rebuild the hourly strip for the new day
+ */
+function updateSelection(dayChanged) {
+  if (!currentData || !currentData.hours.length) return;
+  const body = panelEl.querySelector('.rating-body');
+  if (!body || !body.querySelector('.rp-detail')) { render(); return; }
+
+  const { coast, hours } = currentData;
+  const days = _groupByDay(hours);
+  const selDay = days[selectedDayIdx] || days[0];
+  const selHour = selDay.hours[selectedHourIdx] || selDay.hours[0];
+
+  // ── Overall score block ──
+  const or = selHour.overallRating;
+  const scoreEl = body.querySelector('.rp-score');
+  if (scoreEl) {
+    scoreEl.textContent = or.score == null ? '—' : or.score.toFixed(1);
+    scoreEl.style.background = or.color;
+  }
+  const labelEl = body.querySelector('.rp-rating-label');
+  if (labelEl) { labelEl.textContent = or.label; labelEl.style.color = or.color; }
+  const descEl = body.querySelector('.rp-rating-desc');
+  if (descEl) descEl.textContent = or.desc || '';
+
+  // ── Selected-detail compass + numbers ──
+  const detail = body.querySelector('.rp-detail');
+  const mapCompass = detail.querySelector('.rp-mapcompass');
+  if (mapCompass) {
+    // Map div untouched — swap only the SVG overlay (arrow/barbs per hour).
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderMapCompassHTML(150, selHour, coast, _detailSlotId);
+    const freshOverlay = tmp.querySelector('.rp-mapcompass-overlay');
+    const oldOverlay = mapCompass.querySelector('.rp-mapcompass-overlay');
+    if (freshOverlay && oldOverlay) oldOverlay.replaceWith(freshOverlay);
+  } else {
+    const svg = detail.querySelector(':scope > svg');
+    if (svg) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderCompass(150, selHour, coast || { coastBearing: 0 }, false);
+      if (tmp.firstElementChild) svg.replaceWith(tmp.firstElementChild);
+    }
+  }
+  const info = detail.querySelector('.rp-detail-info');
+  if (info) info.innerHTML = renderDetailInfo(selHour);
+
+  // ── Hourly strip ──
+  if (dayChanged) {
+    const hourly = body.querySelector('.rp-hourly');
+    if (hourly) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderHourly(selDay, coast);
+      hourly.replaceWith(tmp.firstElementChild);
+    }
+  } else {
+    body.querySelectorAll('[data-hour-idx]').forEach(el => {
+      el.classList.toggle('rp-hc-sel', parseInt(el.dataset.hourIdx) === selectedHourIdx);
     });
-  });
-  panelEl.querySelectorAll('[data-day-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      selectedDayIdx = parseInt(el.dataset.dayIdx);
-      selectedHourIdx = 0;
-      render();
-    });
+  }
+
+  // ── Daily selection highlight ──
+  body.querySelectorAll('[data-day-idx]').forEach(el => {
+    el.classList.toggle('rp-day-sel', parseInt(el.dataset.dayIdx) === selectedDayIdx);
   });
 }
 
@@ -274,26 +366,12 @@ export function _resetDetailSlot() {
   _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
 }
 
-function renderSelectedDetail(h, coast) {
+/** Inner content of .rp-detail-info — shared by render() and updateSelection(). */
+function renderDetailInfo(h) {
   const timeStr = h.time.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' +
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
   const windLabel = h.windRating.desc || '';
-
-  // findNearestCoast does a tiered search up to ~2200km and almost
-  // always returns a real coast. Only the "true mid-ocean" sentinel
-  // (no coast within 20°) falls through to the schematic SVG.
-  const hasRealCoast = coast
-    && coast.featureIdx >= 0
-    && Number.isFinite(coast.distance)
-    && coast.distance < Infinity;
-  const compassHtml = hasRealCoast
-    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
-    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
-
   return `
-    <div class="rp-detail">
-      ${compassHtml}
-      <div class="rp-detail-info">
         <div class="rp-detail-time">${timeStr} <span>· selected</span></div>
         <div class="rp-detail-row">
           <span class="rp-detail-label">Swell</span>
@@ -310,7 +388,25 @@ function renderSelectedDetail(h, coast) {
           <span class="rp-detail-val">${h.windSpeedMph.toFixed(0)}</span><span class="rp-detail-unit">mph</span>
           <span class="rp-detail-sub">${compassDir(h.windDir)} · ${windLabel}</span>
         </div>
-      </div>
+  `;
+}
+
+function renderSelectedDetail(h, coast) {
+  // findNearestCoast does a tiered search up to ~2200km and almost
+  // always returns a real coast. Only the "true mid-ocean" sentinel
+  // (no coast within 20°) falls through to the schematic SVG.
+  const hasRealCoast = coast
+    && coast.featureIdx >= 0
+    && Number.isFinite(coast.distance)
+    && coast.distance < Infinity;
+  const compassHtml = hasRealCoast
+    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
+    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
+
+  return `
+    <div class="rp-detail">
+      ${compassHtml}
+      <div class="rp-detail-info">${renderDetailInfo(h)}</div>
     </div>
   `;
 }
