@@ -13,8 +13,8 @@ import { initMap, enhanceMapStyle } from './map.js';
 import { WindRenderer } from './wind.js';
 import { SwellRenderer } from './swell.js';
 import { HeatmapRenderer } from './heatmap.js';
-import { loadGrid } from './grid.js';
-import { initUI, updateLegendVisibility, setStatus } from './ui.js';
+import { loadGrid, deriveGroundswellGrid, deriveWindseaGrid } from './grid.js';
+import { initUI, updateLegendVisibility, updateSwellModeUI, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
 import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
@@ -33,6 +33,15 @@ class App {
     this.marker = null;
     this.windGrid = null;
     this.swellGrid = null;
+    // Partitioned swell (swellpart_fNNN.bin) — loaded lazily, only when a
+    // partition sub-layer is selected, so the default path stays fast.
+    // swellMode: 'combined' | 'ground' | 'windsea'
+    this.swellMode = 'combined';
+    this.swellPartGrid = null;
+    // null = unknown (not probed yet), true/false once checked. Old runs
+    // without swellpart files degrade to combined-only with the sub-toggle
+    // hidden.
+    this.partAvailable = null;
     this.map = null;
     this.wind = null;
     this.swell = null;
@@ -81,6 +90,10 @@ class App {
   async _loadLatestRun() {
     setStatus('Finding latest data...');
     invalidatePumpingCache();
+
+    // New run/model: partition availability must be re-probed.
+    this.partAvailable = null;
+    this.swellPartGrid = null;
 
     const config = window.SURF_CONFIG || {};
     const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
@@ -141,10 +154,16 @@ class App {
     // recently requested hour may apply its grids when it resolves.
     const seq = ++this._loadSeq;
 
+    // Partition grids are only fetched when a partition sub-layer is active —
+    // the combined default never pays for the (4×-larger) swellpart file.
+    const needPart = this.swellMode !== 'combined' &&
+      (this.layer === 'swell' || this.layer === 'both');
+
     try {
-      const [windGrid, swellGrid] = await Promise.all([
+      const [windGrid, swellGrid, partGrid] = await Promise.all([
         this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`),
         this._loadSwellWithFallback(hour),
+        needPart ? this._loadPartWithFallback(hour) : Promise.resolve(undefined),
       ]);
 
       if (seq !== this._loadSeq) return;
@@ -155,7 +174,10 @@ class App {
       }
       if (swellGrid) {
         this.swellGrid = swellGrid;
-        this.swell.setGrid(swellGrid);
+      }
+      if (needPart) {
+        this.swellPartGrid = partGrid || null;
+        if (!partGrid) this._setPartUnavailable();
       }
 
       this._updateVisibility();
@@ -172,12 +194,14 @@ class App {
 
   /** Preload upcoming hours so animation/scrubbing is instant */
   _preload(currentHour) {
+    const partActive = this.swellMode !== 'combined' && this.partAvailable !== false;
     for (const offset of [3, 6]) {
       const h = currentHour + offset;
       if (h > 168) continue;
       const fhr = String(h).padStart(3, '0');
       this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`);
       this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
+      if (partActive) this._cachedLoadGrid(`${this.dataPath}/swellpart_f${fhr}.bin`);
     }
   }
 
@@ -213,14 +237,70 @@ class App {
     return null;
   }
 
+  /** Same ±3/±6h fallback for the partitioned swell file. */
+  async _loadPartWithFallback(hour) {
+    const fhr = String(hour).padStart(3, '0');
+    const grid = await this._cachedLoadGrid(`${this.dataPath}/swellpart_f${fhr}.bin`);
+    if (grid) {
+      this.partAvailable = true;
+      return grid;
+    }
+    for (const offset of [3, -3, 6, -6]) {
+      const nearby = hour + offset;
+      if (nearby < 0 || nearby > 168) continue;
+      const nearFhr = String(nearby).padStart(3, '0');
+      const fallback = await this._cachedLoadGrid(`${this.dataPath}/swellpart_f${nearFhr}.bin`);
+      if (fallback) {
+        this.partAvailable = true;
+        return fallback;
+      }
+    }
+    return null;
+  }
+
+  /** Old runs have no swellpart files: hide the sub-toggle, go combined. */
+  _setPartUnavailable() {
+    this.partAvailable = false;
+    this.swellMode = 'combined';
+    updateSwellModeUI(this);
+  }
+
+  /**
+   * Cheap availability probe (HEAD, no body) so the sub-toggle only shows
+   * when the run actually has partition files. Runs once per data path.
+   */
+  async _probePartAvailability() {
+    if (this.partAvailable !== null || !this.dataPath) return;
+    try {
+      const resp = await fetch(`${this.dataPath}/swellpart_f000.bin`, { method: 'HEAD' });
+      // Only settle on false for a definitive 4xx; transient errors keep null
+      // so a later layer switch re-probes.
+      if (resp.ok) this.partAvailable = true;
+      else if (resp.status >= 400 && resp.status < 500) this.partAvailable = false;
+    } catch (e) { /* network hiccup: stay unknown */ }
+    updateSwellModeUI(this);
+  }
+
+  /** The grid driving the swell heatmap + particles for the active sub-mode. */
+  _activeSwellGrid() {
+    if (this.swellMode !== 'combined' && this.swellPartGrid) {
+      return this.swellMode === 'ground'
+        ? deriveGroundswellGrid(this.swellPartGrid)
+        : deriveWindseaGrid(this.swellPartGrid);
+    }
+    return this.swellGrid;
+  }
+
   _updateVisibility() {
     const showWind = this.layer === 'wind' || this.layer === 'both';
     const showSwell = this.layer === 'swell' || this.layer === 'both';
 
+    const swellField = this._activeSwellGrid();
+
     // Heatmap background: wind speed or swell height
     if (showSwell && !showWind) {
       this.heatmap.setMode('swell');
-      this.heatmap.setGrid(this.swellGrid);
+      this.heatmap.setGrid(swellField);
     } else {
       this.heatmap.setMode('wind');
       this.heatmap.setGrid(this.windGrid);
@@ -232,12 +312,15 @@ class App {
     if (showWind && this.windGrid) this.wind.start();
     else this.wind.stop();
 
-    // Swell particles
+    // Swell particles — dash length encodes period on partition layers
+    if (swellField) this.swell.setGrid(swellField);
+    this.swell.periodDashes = this.swellMode !== 'combined' && !!this.swellPartGrid;
     this.swell.setVisible(showSwell);
-    if (showSwell && this.swellGrid) this.swell.start();
+    if (showSwell && swellField) this.swell.start();
     else this.swell.stop();
 
     updateLegendVisibility(this.layer);
+    updateSwellModeUI(this);
   }
 
   setModel(model) {
@@ -249,7 +332,21 @@ class App {
 
   setLayer(layer) {
     this.layer = layer;
+    if (layer === 'swell' || layer === 'both') this._probePartAvailability();
     this._updateVisibility();
+  }
+
+  /** Swell sub-layer: 'combined' | 'ground' | 'windsea'. */
+  setSwellMode(mode) {
+    if (mode === this.swellMode) return;
+    this.swellMode = mode;
+    if (mode !== 'combined') {
+      // Fetch (or cache-hit) the partition grid for the current hour, then
+      // _updateVisibility inside _loadHour swaps the field.
+      this._loadHour(this.hour);
+    } else {
+      this._updateVisibility();
+    }
   }
 
   setHour(hour) {

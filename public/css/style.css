@@ -133,6 +133,13 @@ body {
   background: var(--accent-dim);
 }
 
+/* Swell sub-layer toggle — slightly smaller than the main layer buttons so
+   it reads as subordinate to the Swell tab it refines */
+.swell-mode-group .ctrl-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .status {
   margin-left: auto;
   font-size: 12px;
