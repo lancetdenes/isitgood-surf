@@ -29,3 +29,4 @@ test/snapshots/*/
 # Python bytecode
 __pycache__/
 test/snapshots/report.html
+install.log
