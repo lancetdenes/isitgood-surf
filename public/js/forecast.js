@@ -71,8 +71,13 @@ const _metaCache = new Map();
 async function fetchRange(url, offset, length) {
   const end = offset + length - 1;
   const resp = await fetch(url, { headers: { Range: `bytes=${offset}-${end}` } });
-  if (!resp.ok) throw new Error(`Range fetch ${url} ${offset}-${end} failed: ${resp.status}`);
-  return resp.arrayBuffer();
+  // Require a true partial response: an intermediary that ignores Range and
+  // answers 200 with the full ~600 MB cube would otherwise be decoded as if
+  // its header/hour-table bytes were forecast values.
+  if (resp.status !== 206) throw new Error(`Range fetch ${url} ${offset}-${end}: expected 206, got ${resp.status}`);
+  const buf = await resp.arrayBuffer();
+  if (buf.byteLength !== length) throw new Error(`Range fetch ${url} ${offset}-${end}: expected ${length} bytes, got ${buf.byteLength}`);
+  return buf;
 }
 
 async function loadCubeMeta(cubeUrl) {
