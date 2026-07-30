@@ -14,13 +14,16 @@ const path = require('path');
 
 const DEMO_DIR = path.join(__dirname, '..', 'demo');
 
-// Grid dimensions (1-degree global grid)
-const NX = 360;
-const NY = 181;
+// Grid dimensions. Default is a 1° global grid (fast to generate). Set
+// DEMO_RES=hi for a 0.25° grid matching real GFS output (1440×721) — useful
+// for performance testing where decode/render cost depends on grid size.
+const HI_RES = process.env.DEMO_RES === 'hi';
+const NX = HI_RES ? 1440 : 360;
+const NY = HI_RES ? 721 : 181;
 const LO1 = 0;     // first lon
 const LA1 = 90;    // first lat (north to south)
-const DX = 1.0;
-const DY = 1.0;
+const DX = HI_RES ? 0.25 : 1.0;
+const DY = HI_RES ? 0.25 : 1.0;
 
 /** Pick an int16 scale that preserves the array's range with headroom. */
 function deriveScale(arr) {
@@ -357,7 +360,7 @@ for (const h of hours) {
 
 console.log('\n\nDemo data written to data/demo/');
 console.log(`  ${hours.length} wind files + ${hours.length} swell files`);
-console.log(`  Grid: ${NX}x${NY} (1° global)`);
+console.log(`  Grid: ${NX}x${NY} (${DX}° global)`);
 
 buildDemoCube(path.join(DEMO_DIR, 'points.bin'), hours);
 
