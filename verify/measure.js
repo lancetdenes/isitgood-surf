@@ -179,7 +179,12 @@ async function scrubPhase(page, hours) {
 
   // ── Phase 3: warm scrub (after full preload — the Windy steady state) ──
   await page.waitForFunction(
-    () => (window.__app?._gridCache?.size ?? 0) >= 114,
+    () => {
+      const app = window.__app;
+      if (!app) return false;
+      const n = app._store?.readyCount ? app._store.readyCount() : (app._gridCache?.size ?? 0);
+      return n >= 114;
+    },
     null, { timeout: 180000, polling: 200 }
   ).catch(() => { console.warn('preload never hit 114 entries; continuing'); });
   const warmHours = [];

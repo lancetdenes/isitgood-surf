@@ -243,7 +243,11 @@ export function parseBinary(buffer) {
 /** Fetch and parse a binary grid file. */
 export async function loadGrid(url) {
   const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Failed to load ${url}: ${resp.status}`);
+  if (!resp.ok) {
+    const err = new Error(`Failed to load ${url}: ${resp.status}`);
+    err.status = resp.status; // callers use this to distinguish 404 from transient failures
+    throw err;
+  }
   const buffer = await resp.arrayBuffer();
   return parseBinary(buffer);
 }
