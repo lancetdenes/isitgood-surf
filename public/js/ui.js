@@ -3,11 +3,16 @@
  */
 
 import { WIND_PALETTE, SWELL_PALETTE, interpolatePalette } from './heatmap.js';
+import {
+  FORECAST_HOURS, N_STEPS, BASE_END, MAX_HOUR,
+  hourToIndex, indexToHour, isExtended,
+} from './hours.js';
 
 export function initUI(app) {
   initSiteName();
   initModelSelector(app);
   initLayerSelector(app);
+  initSwellModeSelector(app);
   initTimeline(app);
   initLegends();
 }
@@ -49,21 +54,79 @@ function initLayerSelector(app) {
   });
 }
 
+// ── Swell sub-layer selector (Combined | Groundswell | Windsea) ──
+function initSwellModeSelector(app) {
+  const btns = document.querySelectorAll('#swell-mode-selector .ctrl-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      app.setSwellMode(btn.dataset.swellmode);
+    });
+  });
+}
+
+const SWELL_LEGEND_TITLES = {
+  combined: 'Swell (m)',
+  ground: 'Groundswell (m)',
+  windsea: 'Windsea (m)',
+};
+
+/**
+ * Sync the sub-toggle with app state: visible only while the swell layer is
+ * active AND the run has partition data (partAvailable !== false). Keeps the
+ * active button and the legend title in step with app.swellMode — needed when
+ * the app force-reverts to combined after a swellpart 404.
+ */
+export function updateSwellModeUI(app) {
+  const sel = document.getElementById('swell-mode-selector');
+  if (!sel) return;
+  const swellActive = app.layer === 'swell' || app.layer === 'both';
+  sel.style.display = (swellActive && app.partAvailable !== false) ? '' : 'none';
+
+  sel.querySelectorAll('.ctrl-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.swellmode === app.swellMode);
+  });
+
+  const legendTitle = document.querySelector('#swell-legend .legend-title');
+  if (legendTitle) legendTitle.textContent = SWELL_LEGEND_TITLES[app.swellMode] || SWELL_LEGEND_TITLES.combined;
+}
+
 // ── Timeline ──
+//
+// The slider is index-based: its value is a position in FORECAST_HOURS
+// (0-168h @3h then 174-336h @6h), not a raw hour. That keeps scrubbing
+// smooth across the 168h cadence change — one slider step is always one
+// forecast step.
+let _sliderEl = null;
+
 function initTimeline(app) {
   const slider = document.getElementById('hour-slider');
+  _sliderEl = slider;
   const playBtn = document.getElementById('play-btn');
   const playIcon = document.getElementById('play-icon');
   const pauseIcon = document.getElementById('pause-icon');
   let playing = false;
-  let interval = null;
+
+  // Index-based slider over the shared hours list.
+  slider.min = 0;
+  slider.max = N_STEPS - 1;
+  slider.step = 1;
+
+  // Tell CSS where the extended (hatched) segment starts, as a fraction of
+  // the index axis — matches the thumb position exactly.
+  const track = slider.closest('.timeline-track');
+  if (track) {
+    track.style.setProperty('--ext-split',
+      `${(hourToIndex(BASE_END) / (N_STEPS - 1) * 100).toFixed(3)}%`);
+  }
 
   // Coalesce scrub events to one setHour per animation frame — the input
   // event can fire far faster than we can usefully re-render, and each
   // setHour kicks off grid loads + layer updates.
   let pendingHour = null;
   slider.addEventListener('input', () => {
-    const hour = parseInt(slider.value);
+    const hour = indexToHour(parseInt(slider.value));
     updateHourDisplay(hour, app.runTime);  // label stays instant
     if (pendingHour === null) {
       requestAnimationFrame(() => {
@@ -74,12 +137,12 @@ function initTimeline(app) {
     pendingHour = hour;
   });
 
-  let animating = false;
   async function animateStep() {
     if (!playing) return;
-    let h = parseInt(slider.value) + 3;
-    if (h > parseInt(slider.max)) h = 0;
-    slider.value = h;
+    let idx = parseInt(slider.value) + 1;
+    if (idx > N_STEPS - 1) idx = 0;
+    slider.value = idx;
+    const h = indexToHour(idx);
     updateHourDisplay(h, app.runTime);
     await app.setHourAsync(h);
     // Wait a beat for rendering, then advance
@@ -103,45 +166,71 @@ function initTimeline(app) {
   app._onRunTimeReady = (runTime) => buildTicks(runTime);
 }
 
+/** Move the slider thumb + hour label to a given forecast hour without
+ *  re-triggering a load. Used when something other than the slider changes
+ *  the app hour (e.g. a pumping-panel peak-hour click). */
+export function syncTimeline(hour, runTime) {
+  if (!_sliderEl) return;
+  _sliderEl.value = hourToIndex(hour);
+  updateHourDisplay(hour, runTime);
+}
+
 function buildTicks(runTime) {
   const ticks = document.getElementById('timeline-ticks');
   ticks.innerHTML = '';
   const now = runTime || new Date();
-  // Show day labels at 24h intervals with 12h sub-ticks
-  for (let h = 0; h <= 168; h += 12) {
+  const lastIdx = N_STEPS - 1;
+
+  // Core range (0-168h): day names every 24h, time sub-ticks every 12h.
+  // Extended range (>168h): 6h steps compress the axis 2×, so 24h labels
+  // land at the same pixel spacing as the core 12h ticks. Alternate days
+  // get minor styling so phones (which hide minors) stay uncluttered.
+  const addTick = (h, text, cls) => {
     const tick = document.createElement('span');
+    tick.textContent = text;
+    tick.classList.add(cls);
+    if (isExtended(h)) tick.classList.add('tick-ext');
+    const idx = hourToIndex(h);
+    if (idx === 0) tick.classList.add('tick-first');
+    else if (idx === lastIdx) tick.classList.add('tick-last');
+    tick.style.left = `${(idx / lastIdx * 100).toFixed(3)}%`;
+    ticks.appendChild(tick);
+  };
+
+  for (let h = 0; h <= BASE_END; h += 12) {
     const d = new Date(now.getTime() + h * 3600000);
     if (h === 0) {
-      tick.textContent = 'Now';
-      tick.classList.add('tick-major');
+      addTick(h, 'Now', 'tick-major');
     } else if (h % 24 === 0) {
-      tick.textContent = d.toLocaleDateString('en-US', { weekday: 'short' });
-      tick.classList.add('tick-major');
+      addTick(h, d.toLocaleDateString('en-US', { weekday: 'short' }), 'tick-major');
     } else {
-      tick.textContent = d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
-      tick.classList.add('tick-minor');
+      addTick(h, d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true }), 'tick-minor');
     }
-    ticks.appendChild(tick);
+  }
+  for (let h = BASE_END + 24; h <= MAX_HOUR; h += 24) {
+    const d = new Date(now.getTime() + h * 3600000);
+    const label = d.toLocaleDateString('en-US', { weekday: 'short' });
+    // 192, 240, 288, 336 → major; 216, 264, 312 → minor (hidden on phones)
+    addTick(h, label, ((h - BASE_END) / 24) % 2 === 1 ? 'tick-major' : 'tick-minor');
   }
 }
 
 function updateHourDisplay(hour, runTime) {
   const label = document.querySelector('.hour-label');
   const dateEl = document.getElementById('hour-date');
+  const extSuffix = isExtended(hour) ? ' · extended' : '';
 
   if (runTime) {
     const valid = new Date(runTime.getTime() + hour * 3600000);
     const timeStr = valid.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
     const dayStr = valid.toLocaleDateString('en-US', { weekday: 'short' });
 
-    if (hour === 0) {
-      label.textContent = dayStr + ' ' + timeStr;
-    } else {
-      label.textContent = dayStr + ' ' + timeStr;
-    }
-    dateEl.textContent = valid.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    label.textContent = dayStr + ' ' + timeStr;
+    dateEl.textContent =
+      valid.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + extSuffix;
   } else {
     label.textContent = hour === 0 ? 'Now' : `+${hour}h`;
+    dateEl.textContent = extSuffix ? 'extended' : '';
   }
 }
 

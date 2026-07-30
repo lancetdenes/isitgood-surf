@@ -133,6 +133,13 @@ body {
   background: var(--accent-dim);
 }
 
+/* Swell sub-layer toggle — slightly smaller than the main layer buttons so
+   it reads as subordinate to the Swell tab it refines */
+.swell-mode-group .ctrl-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .status {
   margin-left: auto;
   font-size: 12px;
@@ -181,6 +188,9 @@ body {
 .timeline-track {
   flex: 1;
   position: relative;
+  /* Fraction of the track covered by the reliable 0-168h range.
+     Overwritten at init by ui.js from the shared hours module. */
+  --ext-split: 66.667%;
 }
 
 .timeline-track input[type="range"] {
@@ -188,10 +198,36 @@ body {
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(148, 163, 184, 0.2);
+  /* Two-segment track: solid for the core 0-168h range, then a dimmer
+     hatched segment for the lower-confidence extended range (168-336h). */
+  background-color: transparent;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.2), rgba(148, 163, 184, 0.2)),
+    repeating-linear-gradient(115deg,
+      rgba(148, 163, 184, 0.26) 0 2px,
+      rgba(148, 163, 184, 0.07) 2px 5px);
+  background-size: var(--ext-split) 100%, calc(100% - var(--ext-split)) 100%;
+  background-position: 0 0, 100% 0;
+  background-repeat: no-repeat;
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+}
+
+/* Small "extended" cue floating above the hatched segment, Surfline-style. */
+.timeline-ext-label {
+  position: absolute;
+  top: -12px;
+  left: var(--ext-split);
+  transform: translateX(6px);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.75;
+  pointer-events: none;
+  user-select: none;
 }
 
 .timeline-track input[type="range"]::-webkit-slider-thumb {
@@ -216,15 +252,28 @@ body {
 }
 
 .timeline-ticks {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0 0;
+  /* Labels are absolutely positioned by ui.js at their timeline-index
+     fraction — the hour axis is non-uniform (3h steps then 6h steps), so
+     flex space-between spacing would drift from the thumb position. */
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
   font-size: 9px;
   color: var(--text-muted);
   pointer-events: none;
   user-select: none;
   overflow: hidden;
 }
+
+.timeline-ticks span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.timeline-ticks .tick-first { transform: none; }
+.timeline-ticks .tick-last { transform: translateX(-100%); }
 
 .timeline-ticks .tick-major {
   font-weight: 600;
@@ -235,6 +284,11 @@ body {
 .timeline-ticks .tick-minor {
   opacity: 0.5;
   font-size: 8px;
+}
+
+/* Extended-range (>168h) labels: dimmer, matching the hatched track. */
+.timeline-ticks .tick-ext {
+  opacity: 0.55;
 }
 
 .hour-display {
@@ -434,6 +488,53 @@ body {
   color: var(--text-muted); font-weight: 600; margin-bottom: 10px;
 }
 
+/* Swell trains (partitioned swell readout, Surfline-style) */
+.rp-trains {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+.rp-train {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 0;
+}
+.rp-train-arrow {
+  align-self: center; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  color: #7dd3fc;
+}
+.rp-train-windsea .rp-train-arrow { color: #94a3b8; }
+.rp-train-ht { font-size: 15px; font-weight: 700; min-width: 44px; }
+.rp-train-per { font-size: 13px; font-weight: 600; min-width: 30px; }
+.rp-train-u { font-size: 10px; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
+.rp-train-dir { font-size: 11px; color: var(--text-muted); min-width: 62px; }
+.rp-train-kind {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); min-width: 48px;
+}
+.rp-train-kind-lp { color: #a78bfa; font-weight: 700; }
+.rp-train-bar {
+  flex: 1; align-self: center; height: 3px; border-radius: 2px;
+  background: rgba(148,163,184,0.12); overflow: hidden;
+}
+.rp-train-bar span {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(to right, #38bdf8, #818cf8);
+}
+.rp-train-windsea .rp-train-bar span {
+  background: rgba(148,163,184,0.55);
+}
+
+/* Long-period badge in the selected-detail header — additive flag only,
+   ratings still score the combined field */
+.rp-lp-chip {
+  display: inline-block; margin-left: 6px; padding: 1px 6px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+  color: #c4b5fd; background: rgba(139,92,246,0.16);
+  border: 1px solid rgba(139,92,246,0.35); border-radius: 999px;
+  vertical-align: 1px;
+}
+
 /* Hourly scroll */
 .rp-hourly {
   padding: 14px 18px;
@@ -480,6 +581,25 @@ body {
 .rp-bar-bg { height: 5px; background: rgba(148,163,184,0.12); border-radius: 3px; overflow: hidden; }
 .rp-bar-fill { height: 100%; border-radius: 3px; }
 
+/* Week-2 (extended-range) days: divider + slight dim, matching the
+   timeline's hatched extended segment. */
+.rp-ext-divider {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 4px 4px;
+}
+.rp-ext-divider::before,
+.rp-ext-divider::after {
+  content: ''; flex: 1; height: 1px;
+  background: repeating-linear-gradient(90deg,
+    rgba(148,163,184,0.35) 0 3px, transparent 3px 7px);
+}
+.rp-ext-divider span {
+  font-size: 8px; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap;
+}
+.rp-day-ext { opacity: 0.78; }
+.rp-day-ext:hover, .rp-day-ext.rp-day-sel { opacity: 1; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   /* Single scrollable row: wrapping made the bar taller than the fixed
@@ -516,8 +636,8 @@ body {
     min-width: 160px;
   }
 
-  /* 15 tick labels don't fit a phone-width track; majors alone stay
-     evenly spaced because they're on a uniform 24h interval. */
+  /* Full tick density doesn't fit a phone-width track; majors alone
+     (24h days in the core range, 48h days in the extended range) do. */
   .timeline-ticks .tick-minor {
     display: none;
   }
@@ -647,7 +767,12 @@ body {
 .upload-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .upload-head h3 { font-size: 14px; }
 .upload-preview img, .upload-preview video { max-width: 100%; border-radius: var(--radius); margin: 8px 0; }
-.upload-minimap { height: 180px; border-radius: var(--radius); margin: 8px 0; }
+.upload-location { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin: 8px 0; padding: 8px 10px; background: rgba(30,41,59,0.8);
+  border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; }
+.upload-location-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-location-missing { color: #fbbf24; }
+#upload-location-btn { flex-shrink: 0; font-size: 11px; }
 .upload-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; flex-wrap: wrap; }
 .upload-meta input[type="datetime-local"] {
   background: rgba(30,41,59,0.8); border: 1px solid var(--border);
@@ -682,3 +807,125 @@ body {
   font-size: 12px; color: var(--text); }
 .media-lightbox-meta .media-report { background: none; border: none; color: var(--text-muted);
   text-decoration: underline; cursor: pointer; font-size: 11px; }
+
+/* ── Buoy panel ── */
+.buoy-panel { z-index: 13; }  /* sits above the rating panel if both animate */
+.bp-header { padding-right: 40px; }
+.bp-age { font-size: 10px; color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.bp-loading { padding: 16px 18px; font-size: 12px; color: var(--text-muted); }
+
+.bp-hero {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+.bp-hero-cell { text-align: center; }
+.bp-hero-val {
+  font-size: 24px; font-weight: 800; line-height: 1.1;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.bp-hero-unit { font-size: 11px; font-weight: 600; color: var(--text-muted); margin-left: 2px; align-self: flex-end; padding-bottom: 3px; }
+.bp-hero-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b; margin-top: 4px; }
+.bp-dir-arrow { color: var(--accent); flex-shrink: 0; }
+
+.bp-meta { padding: 10px 18px 12px; border-bottom: 1px solid rgba(148,163,184,0.08); }
+.bp-meta-row { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; }
+.bp-meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; }
+.bp-meta-val { font-size: 13px; font-weight: 600; }
+.bp-unit { font-size: 10px; color: var(--text-muted); font-weight: 400; margin-left: 2px; }
+.bp-sub { font-size: 11px; color: var(--text-muted); font-weight: 400; }
+
+.bp-section { padding: 14px 18px; border-bottom: 1px solid rgba(148,163,184,0.08); }
+.bp-steep {
+  font-size: 9px; color: var(--accent); background: var(--accent-dim);
+  border-radius: 4px; padding: 1px 6px; margin-left: 6px; letter-spacing: 0.5px;
+}
+.bp-part-head, .bp-part-row {
+  display: grid; grid-template-columns: 10px 70px 1fr 1fr 1fr;
+  gap: 6px; align-items: center;
+}
+.bp-part-head span { font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; text-align: right; }
+.bp-part-row { padding: 5px 0; border-top: 1px solid rgba(148,163,184,0.06); }
+.bp-part-label { font-size: 11px; font-weight: 600; }
+.bp-part-val { font-size: 13px; font-weight: 700; text-align: right; }
+.bp-part-dot { width: 7px; height: 7px; border-radius: 50%; }
+.bp-dot-swell { background: #38bdf8; }
+.bp-dot-sea { background: #64748b; }
+
+.bp-spectrum { width: 100%; height: auto; display: block; margin-top: 4px; }
+.bps-tick { font-size: 9px; fill: #94a3b8; font-family: var(--font); }
+.bps-peak { font-size: 10px; font-weight: 700; fill: #7dd3fc; font-family: var(--font); }
+.bps-zone { font-size: 8px; fill: rgba(148,163,184,0.55); font-family: var(--font); letter-spacing: 0.5px; text-transform: uppercase; }
+.bp-spec-note { font-size: 10px; color: #64748b; margin-top: 6px; }
+
+/* ── Photo markers on the map (media-map.js) ── */
+.photo-marker {
+  width: 44px; height: 44px; border-radius: 50%;
+  background-size: cover; background-position: center;
+  border: 2px solid rgba(56, 189, 248, 0.9);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.55), 0 2px 6px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: transform 0.25s ease, opacity 0.25s ease, box-shadow 0.25s ease;
+}
+.photo-marker:hover { transform: scale(1.18); z-index: 5; }
+/* Outside the ±6h timeline window: dim, shrink, lose the glow */
+.photo-marker.photo-dim {
+  opacity: 0.3;
+  transform: scale(0.6);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.photo-marker.photo-dim:hover { opacity: 0.85; transform: scale(1); }
+/* Zoom gating: dots when zoomed out, hidden when very far out */
+.photo-marker.photo-tiny { width: 14px; height: 14px; border-width: 1.5px; }
+.photo-marker.photo-hidden { display: none; }
+
+/* ── Floating upload button ── */
+#media-fab {
+  position: fixed; right: 12px; bottom: 148px; z-index: 40;
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--surface-solid); border: 1px solid var(--border);
+  color: var(--text); font-size: 20px; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+#media-fab:hover { transform: scale(1.08); border-color: var(--accent); }
+#media-fab[hidden] { display: none; }
+#photos-toggle[hidden] { display: none; }
+
+/* ── Full-screen location picker (geo-picker.js) ── */
+.geo-picker { position: fixed; inset: 0; z-index: 85; background: var(--bg);
+  display: flex; flex-direction: column; }
+.geo-picker-head { display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface-solid); border-bottom: 1px solid var(--border); }
+.geo-picker-search { position: relative; flex: 1; }
+.geo-picker-search input { width: 100%; padding: 8px 10px; font-size: 13px;
+  background: rgba(30,41,59,0.8); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); }
+.geo-picker-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 2;
+  background: var(--surface-solid); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; }
+.geo-picker-result { display: block; width: 100%; text-align: left; padding: 8px 10px;
+  background: none; border: none; color: var(--text); font-size: 13px; cursor: pointer; }
+.geo-picker-result:hover { background: var(--accent-dim); }
+.gp-region { color: var(--text-muted); font-size: 11px; }
+.geo-picker-map { flex: 1; position: relative; }
+.geo-picker-crosshair { position: absolute; left: 50%; top: 50%; pointer-events: none; z-index: 3; }
+.geo-picker-crosshair .gp-ring { position: absolute; left: -16px; top: -16px; width: 32px; height: 32px;
+  border: 2px solid rgba(56,189,248,0.85); border-radius: 50%;
+  box-shadow: 0 0 12px rgba(56,189,248,0.4); }
+.geo-picker-crosshair .gp-dot { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px;
+  background: var(--accent); border-radius: 50%; }
+.geo-picker-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+  background: var(--surface-solid); border-top: 1px solid var(--border); }
+.geo-picker-label { font-size: 13px; min-width: 0; }
+.geo-picker-actions { display: flex; gap: 8px; }
+.geo-picker-confirm { background: var(--accent-dim); border-color: var(--accent); }
+
+/* ── Lightbox additions: spot line, badges, jump button ── */
+.media-lightbox-spot { font-size: 14px; font-weight: 600; }
+.media-badge { display: inline-block; padding: 1px 7px; margin-left: 4px; border-radius: 9px;
+  font-size: 10px; color: var(--text-muted); border: 1px solid var(--border); vertical-align: 1px; }
+.media-badge-exif { color: #4ade80; border-color: rgba(74, 222, 128, 0.4); }
+.media-jump { font-size: 11px; margin-top: 4px; }

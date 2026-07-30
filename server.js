@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 
 const compression = require('compression');
+const { FORECAST_HOURS } = require('./data/scripts/lib/forecast-hours');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,6 +27,17 @@ app.use((req, res, next) => {
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Local-dev mock of the media backend (uploads, /api/me, media lists).
+// The real backend is Vercel functions + Neon + R2; until those are
+// provisioned, plain `node server.js` gets an in-memory stand-in so the
+// media feature is fully demoable. Gated off as soon as DATABASE_URL is
+// configured (or force it with MEDIA_MOCK=1 / disable with MEDIA_MOCK=0).
+const mediaMockEnabled = process.env.MEDIA_MOCK === '1' ||
+  (process.env.MEDIA_MOCK !== '0' && !process.env.DATABASE_URL);
+if (mediaMockEnabled) {
+  require('./server-media-mock')(app);
+}
+
 // Serve kdbush from node_modules for the hires coastline module.
 app.use('/vendor/kdbush', express.static(path.join(__dirname, 'node_modules/kdbush')));
 
@@ -43,9 +55,32 @@ app.use('/data', express.static(DATA_DIR, {
 // Guarantees clients never see a partially-written run.
 const isPublishedRun = (d) => !d.endsWith('.tmp') && !d.endsWith('.old');
 
+// Directory test that tolerates a race: receive-run.sh's `rm -rf` during an
+// atomic swap can delete an entry between readdir and statSync, which would
+// otherwise throw and 500 the route (and on /api/latest send the client to
+// synthetic demo data). Treat a vanished entry as "not a directory".
+const isDirSafe = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+
+// Input validation for path components. Express URL-decodes `%2F` inside a
+// single route parameter, so `:model` / `:run` would otherwise accept
+// `../../etc`-style traversal (verified: readdir of any readable directory).
+const ALLOWED_MODELS = new Set(['gfs', 'ecmwf', 'demo']);
+const isValidModel = (m) => ALLOWED_MODELS.has(m);
+const isValidRun = (r) => r === 'demo' || /^\d{8}_\d{2}z$/.test(r);
+
+// Resolve a client-supplied /data path and confirm it stays inside DATA_DIR.
+// Returns the absolute path, or null if it escapes (traversal) or is malformed.
+function resolveDataPath(dataPath) {
+  if (typeof dataPath !== 'string' || !dataPath.length) return null;
+  const resolved = path.resolve(__dirname, dataPath.replace(/^\//, ''));
+  if (resolved !== DATA_DIR && !resolved.startsWith(DATA_DIR + path.sep)) return null;
+  return resolved;
+}
+
 // --- API: list available model runs ---
 app.get('/api/runs/:model', (req, res) => {
   const model = req.params.model;
+  if (!isValidModel(model)) return res.status(400).json({ error: 'Invalid model' });
   const modelDir = path.join(DATA_DIR, model);
 
   if (!fs.existsSync(modelDir)) {
@@ -53,7 +88,7 @@ app.get('/api/runs/:model', (req, res) => {
   }
 
   const runs = fs.readdirSync(modelDir)
-    .filter(d => fs.statSync(path.join(modelDir, d)).isDirectory())
+    .filter(d => isDirSafe(path.join(modelDir, d)))
     .filter(isPublishedRun)
     .sort()
     .reverse();
@@ -64,6 +99,7 @@ app.get('/api/runs/:model', (req, res) => {
 // --- API: metadata for a specific run ---
 app.get('/api/runs/:model/:run', (req, res) => {
   const { model, run } = req.params;
+  if (!isValidModel(model) || !isValidRun(run)) return res.status(400).json({ error: 'Invalid model or run' });
   const runDir = path.join(DATA_DIR, model, run);
 
   if (!fs.existsSync(runDir)) {
@@ -86,6 +122,7 @@ app.get('/api/runs/:model/:run', (req, res) => {
 // --- API: latest run redirect ---
 app.get('/api/latest/:model', (req, res) => {
   const model = req.params.model;
+  if (!isValidModel(model)) return res.status(400).json({ error: 'Invalid model' });
   const modelDir = path.join(DATA_DIR, model);
 
   if (!fs.existsSync(modelDir)) {
@@ -98,7 +135,7 @@ app.get('/api/latest/:model', (req, res) => {
   }
 
   const runs = fs.readdirSync(modelDir)
-    .filter(d => fs.statSync(path.join(modelDir, d)).isDirectory())
+    .filter(d => isDirSafe(path.join(modelDir, d)))
     .filter(isPublishedRun)
     .sort()
     .reverse();
@@ -206,10 +243,10 @@ function interpolateAngle(grid, paramIdx, lon, lat) {
 // Cache parsed grids in memory (key = file path)
 const gridCache = new Map();
 // Grids are stored as Float32Array after parse (~8 MB wind, ~12.5 MB swell per
-// hour). 150 entries covers a full run + headroom for a partial incoming run
-// during atomic swap. Values < 114 thrash the cache on /api/forecast because
-// one request touches every file in the run.
-const CACHE_MAX = 150;
+// hour). 200 entries covers a full 85-hour run (170 grid files) + headroom
+// for a partial incoming run during atomic swap. Values < 170 thrash the
+// cache on /api/forecast because one request touches every file in the run.
+const CACHE_MAX = 200;
 const fsPromises = require('fs').promises;
 
 async function loadGridAsync(filePath) {
@@ -261,7 +298,8 @@ app.get('/api/forecast', async (req, res) => {
     return res.status(400).json({ error: 'Missing lat, lon, or path' });
   }
 
-  const runDir = path.join(__dirname, dataPath.replace(/^\//, ''));
+  const runDir = resolveDataPath(dataPath);
+  if (!runDir) return res.status(400).json({ error: 'Invalid path' });
   try { await fsPromises.access(runDir); } catch {
     return res.status(404).json({ error: 'Run not found' });
   }
@@ -269,8 +307,9 @@ app.get('/api/forecast', async (req, res) => {
   const hours = [];
   let lastSwellValues = null; // Fallback for missing hours
 
-  // Process sequentially to avoid memory spikes (swell files are ~30MB each)
-  for (let h = 0; h <= 168; h += 3) {
+  // Process sequentially to avoid memory spikes (swell files are ~30MB each).
+  // Full horizon: 0-168 @3h then 174-336 @6h (see data/scripts/lib/forecast-hours.js).
+  for (const h of FORECAST_HOURS) {
     const fhr = String(h).padStart(3, '0');
     const entry = {
       hour: h,
@@ -366,6 +405,33 @@ function detectCoastFromGrid(grid, lon, lat) {
   return { coastBearing, seawardDir, offshoreDir };
 }
 
+// --- API: NDBC buoys (mirrors the Vercel functions in api/buoys/*.mjs) ---
+// The handlers are plain (req, res) functions wrapped by route(), so Express
+// can mount them directly. Local dev tries live NDBC first (server-side fetch
+// has no CORS constraint); when offline it falls back to the test fixtures.
+if (!process.env.NDBC_FIXTURE_DIR) {
+  process.env.NDBC_FIXTURE_DIR = path.join(__dirname, 'api', '_lib', 'test', 'fixtures', 'ndbc');
+}
+
+const buoyHandlers = {}; // name -> handler (lazy ESM import, CommonJS host)
+function buoyRoute(name) {
+  return async (req, res) => {
+    try {
+      if (!buoyHandlers[name]) {
+        buoyHandlers[name] = (await import(`./api/buoys/${name}.mjs`)).default;
+      }
+      await buoyHandlers[name](req, res);
+    } catch (err) {
+      console.error(`buoys/${name} failed:`, err);
+      res.status(500).json({ error: 'internal' });
+    }
+  };
+}
+
+app.get('/api/buoys/stations', buoyRoute('stations'));
+app.get('/api/buoys/obs', buoyRoute('obs'));
+app.get('/api/buoys/spectrum', buoyRoute('spectrum'));
+
 // --- Scheduled data updates ---
 
 let updateRunning = false;
@@ -448,7 +514,7 @@ function warmupCache() {
     console.log(`  [cache] Warming up ${model}/${runs[0]}...`);
 
     const files = [];
-    for (let h = 0; h <= 168; h += 3) {
+    for (const h of FORECAST_HOURS) {
       const fhr = String(h).padStart(3, '0');
       files.push(path.join(runDir, `wind_f${fhr}.bin`));
       files.push(path.join(runDir, `swell_f${fhr}.bin`));

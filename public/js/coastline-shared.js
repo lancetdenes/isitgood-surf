@@ -13,6 +13,25 @@ export function bearing(lat1, lon1, lat2, lon2) {
   return (Math.atan2(y, x) * toDeg + 360) % 360;
 }
 
+/**
+ * Unwrap a segment's endpoint longitudes so the pair is continuous
+ * (|a − b| ≤ 180). The hires binary stores lons in [0, 360), so a feature
+ * crossing the Greenwich meridian contains consecutive vertices like
+ * 359.93 → 0.00; treating those as-is puts the segment's arithmetic
+ * midpoint (and any projection onto it) in the mid-Pacific at lon ≈ 180.
+ * Returns [lonA, lonB'] where lonB' may be outside [0, 360).
+ */
+export function unwrapSegmentLons(lonA, lonB) {
+  if (lonB - lonA > 180) lonB -= 360;
+  else if (lonB - lonA < -180) lonB += 360;
+  return [lonA, lonB];
+}
+
+/** Normalize any longitude into [-180, 180). */
+export function normLon180(lon) {
+  return ((lon % 360) + 540) % 360 - 180;
+}
+
 /** Walk `distKm` from (lat, lon) along bearing `brgDeg`; return [lat, lon]. */
 export function stepAlongBearing(lat, lon, brgDeg, distKm) {
   const rad = brgDeg * Math.PI / 180;

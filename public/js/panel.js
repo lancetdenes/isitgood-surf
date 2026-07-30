@@ -2,7 +2,8 @@
  * panel.js — Surf rating sidebar panel
  *
  * Renders the full rating panel: overall score, compass diagram,
- * hourly scroll with mini compasses, and 7-day outlook.
+ * hourly scroll with mini compasses, and 14-day outlook (days 8-14 come
+ * from the GFS extended range and are flagged as lower-confidence).
  */
 
 import {
@@ -10,10 +11,12 @@ import {
   ratingBgColor, compassDir, msToMph, mToFt
 } from './ratings.js';
 import { computeForecast } from './forecast.js';
+import { loadGrid, SWELLPART_BASES } from './grid.js';
 import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
 import { renderCompass as renderCompassSvg } from './compass-render.js';
 import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
 import { renderMediaStrip } from './media.js';
+import { BASE_END } from './hours.js';
 
 // ── State ──
 
@@ -28,6 +31,24 @@ export function initPanel() {
   panelEl = document.getElementById('rating-panel');
   document.getElementById('rating-close').addEventListener('click', closePanel);
 
+  // Delegated clicks for hour/day selection — survives partial re-renders
+  // (updateSelection patches the DOM in place instead of rebuilding it).
+  panelEl.addEventListener('click', (e) => {
+    if (!currentData) return;
+    const hourEl = e.target.closest('[data-hour-idx]');
+    if (hourEl) {
+      selectedHourIdx = parseInt(hourEl.dataset.hourIdx);
+      updateSelection(false);
+      return;
+    }
+    const dayEl = e.target.closest('[data-day-idx]');
+    if (dayEl) {
+      selectedDayIdx = parseInt(dayEl.dataset.dayIdx);
+      selectedHourIdx = 0;
+      updateSelection(true);
+    }
+  });
+
   // Refresh the media strip after a successful upload
   document.addEventListener('media-uploaded', () => {
     if (isPanelOpen()) {
@@ -39,6 +60,7 @@ export function initPanel() {
 export function closePanel() {
   panelEl.classList.remove('open');
   currentData = null;
+  clearTimeout(_syncTimer);
 }
 
 /** Check if panel is currently open */
@@ -53,11 +75,26 @@ export function updatePanelSpotName(name) {
   if (el) el.textContent = name;
 }
 
-/** Update the panel's selected hour to match the slider position */
+/**
+ * Update the panel's selected hour to match the slider position.
+ *
+ * Runs on a short trailing debounce so timeline scrubbing never pays for
+ * panel DOM work on the critical path — the map layers update every tick,
+ * the panel catches up when the slider settles. The update itself is an
+ * in-place DOM patch (updateSelection), so the mini-map survives.
+ */
+let _syncTimer = null;
 export function syncPanelHour(sliderHour) {
   if (!currentData || !currentData.hours.length) return;
-  _selectClosestHour(sliderHour);
-  render();
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => {
+    if (!currentData) return;
+    const prevDay = selectedDayIdx;
+    const prevHour = selectedHourIdx;
+    _selectClosestHour(sliderHour);
+    if (selectedDayIdx === prevDay && selectedHourIdx === prevHour) return;
+    updateSelection(selectedDayIdx !== prevDay);
+  }, 120);
 }
 
 /** Find the day/hour indices closest to a given forecast hour */
@@ -89,8 +126,9 @@ function _selectClosestHour(targetHour) {
 // ── Build forecast data via server API ──
 
 /**
- * Build the full 7-day forecast for a point via the server-side API.
- * One request returns all hours — much faster than loading 57+ grid files.
+ * Build the full forecast (out to 14 days) for a point from the run's SCUB
+ * cube. One pair of range requests returns all hours — much faster than
+ * loading 85 grid files.
  */
 export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0, cachedLoad = null) {
   panelEl.classList.add('open');
@@ -103,9 +141,16 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     // clicks are instant when the timeline has already been preloaded.
     const data = await computeForecast(lat, lon, dataPath, cachedLoad);
 
-    // Prefer grid-detected coast (sharper at the actual ocean edge);
-    // fall back to GeoJSON coastline when the point is too far inland.
-    const effectiveCoast = data.coast || coast;
+    // Prefer the coastline lookup (GSHHG segment projection with adaptive
+    // bearing smoothing + seaward wet-test) — it is far more accurate than
+    // the coarse grid-ring estimate, which samples 24 directions on a 0.25°
+    // grid in *degree* space (up to ~22° of latitude-dependent bias, median
+    // ~30° disagreement across named spots). The grid detection is only a
+    // fallback for when the coastline lookup failed to find a reliable
+    // bearing (mid-ocean sentinel, or both seaward wet-tests failed).
+    const effectiveCoast = (coast && !coast.unreliableBearing)
+      ? coast
+      : (data.coast || coast);
 
     const hours = data.hours.map(raw => {
       // Wave power per unit crest length (deep-water approximation).
@@ -147,7 +192,13 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
       return entry;
     });
 
-    currentData = { lat, lon, coast: effectiveCoast, hours };
+    currentData = {
+      lat, lon, coast: effectiveCoast, hours,
+      // For the lazy swell-trains section: partition grids are fetched only
+      // after the panel opens (per selected hour), never on the default path.
+      dataPath, cachedLoad,
+      trainsByHour: new Map(),
+    };
     _selectClosestHour(currentHour);
     render();
   } catch (e) {
@@ -205,12 +256,17 @@ function render() {
     ${renderHeader(lat, lon)}
     ${renderOverall(or)}
     ${renderSelectedDetail(selHour, coast)}
+    <div class="rp-trains" id="rp-trains-slot" style="display:none"></div>
     ${renderHourly(selDay, coast)}
     ${renderDaily(days, coast)}
     <div style="font-size: 10px; color: rgba(148,163,184,0.5); margin-top: 12px; text-align: right; padding-right: 4px;">
       Coast: GSHHG &bull; Weather: NOAA GFS
     </div>
   `;
+
+  // Swell trains (partitioned swell) — async fill; hidden if the run has no
+  // swellpart files. Fetches lazily, only for the hour on display.
+  _fillTrains(selHour);
 
   // Spot media strip (no-ops until the media API is deployed). Cached per
   // location inside media.js, so hour-scrub re-renders don't refetch.
@@ -224,20 +280,83 @@ function render() {
     mountMapCompass(slotEl.dataset.slot, coast);
   }
 
-  // Wire up click handlers
-  panelEl.querySelectorAll('[data-hour-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      selectedHourIdx = parseInt(el.dataset.hourIdx);
-      render();
+  // Click handling is delegated (see initPanel) — nothing to wire here.
+}
+
+/**
+ * Patch the already-rendered panel for a new selected day/hour WITHOUT
+ * rebuilding innerHTML. Keeping the DOM alive means the mini-map MapLibre
+ * instance survives (no new WebGL context / style fetch per timeline tick)
+ * and scrubbing does a fraction of the DOM work.
+ *
+ * @param {boolean} dayChanged rebuild the hourly strip for the new day
+ */
+function updateSelection(dayChanged) {
+  if (!currentData || !currentData.hours.length) return;
+  const body = panelEl.querySelector('.rating-body');
+  if (!body || !body.querySelector('.rp-detail')) { render(); return; }
+
+  const { coast, hours } = currentData;
+  const days = _groupByDay(hours);
+  const selDay = days[selectedDayIdx] || days[0];
+  const selHour = selDay.hours[selectedHourIdx] || selDay.hours[0];
+
+  // ── Overall score block ──
+  const or = selHour.overallRating;
+  const scoreEl = body.querySelector('.rp-score');
+  if (scoreEl) {
+    scoreEl.textContent = or.score == null ? '—' : or.score.toFixed(1);
+    scoreEl.style.background = or.color;
+  }
+  const labelEl = body.querySelector('.rp-rating-label');
+  if (labelEl) { labelEl.textContent = or.label; labelEl.style.color = or.color; }
+  const descEl = body.querySelector('.rp-rating-desc');
+  if (descEl) descEl.textContent = or.desc || '';
+
+  // ── Selected-detail compass + numbers ──
+  const detail = body.querySelector('.rp-detail');
+  const mapCompass = detail.querySelector('.rp-mapcompass');
+  if (mapCompass) {
+    // Map div untouched — swap only the SVG overlay (arrow/barbs per hour).
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderMapCompassHTML(150, selHour, coast, _detailSlotId);
+    const freshOverlay = tmp.querySelector('.rp-mapcompass-overlay');
+    const oldOverlay = mapCompass.querySelector('.rp-mapcompass-overlay');
+    if (freshOverlay && oldOverlay) oldOverlay.replaceWith(freshOverlay);
+  } else {
+    const svg = detail.querySelector(':scope > svg');
+    if (svg) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderCompass(150, selHour, coast || { coastBearing: 0 }, false);
+      if (tmp.firstElementChild) svg.replaceWith(tmp.firstElementChild);
+    }
+  }
+  const info = detail.querySelector('.rp-detail-info');
+  if (info) info.innerHTML = renderDetailInfo(selHour);
+
+  // ── Hourly strip ──
+  if (dayChanged) {
+    const hourly = body.querySelector('.rp-hourly');
+    if (hourly) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = renderHourly(selDay, coast);
+      hourly.replaceWith(tmp.firstElementChild);
+    }
+  } else {
+    body.querySelectorAll('[data-hour-idx]').forEach(el => {
+      el.classList.toggle('rp-hc-sel', parseInt(el.dataset.hourIdx) === selectedHourIdx);
     });
+  }
+
+  // ── Daily selection highlight ──
+  body.querySelectorAll('[data-day-idx]').forEach(el => {
+    el.classList.toggle('rp-day-sel', parseInt(el.dataset.dayIdx) === selectedDayIdx);
   });
-  panelEl.querySelectorAll('[data-day-idx]').forEach(el => {
-    el.addEventListener('click', () => {
-      selectedDayIdx = parseInt(el.dataset.dayIdx);
-      selectedHourIdx = 0;
-      render();
-    });
-  });
+
+  // ── Swell trains + LP badge ── patched in place like everything else
+  // (async fill for the newly selected hour; no innerHTML rebuild of the
+  // panel shell, so the mini-map still survives scrubbing).
+  _fillTrains(selHour);
 }
 
 function renderHeader(lat, lon) {
@@ -274,27 +393,13 @@ export function _resetDetailSlot() {
   _detailSlotId = 'rp-mapcompass-' + Math.random().toString(36).slice(2, 8);
 }
 
-function renderSelectedDetail(h, coast) {
+/** Inner content of .rp-detail-info — shared by render() and updateSelection(). */
+function renderDetailInfo(h) {
   const timeStr = h.time.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' +
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
   const windLabel = h.windRating.desc || '';
-
-  // findNearestCoast does a tiered search up to ~2200km and almost
-  // always returns a real coast. Only the "true mid-ocean" sentinel
-  // (no coast within 20°) falls through to the schematic SVG.
-  const hasRealCoast = coast
-    && coast.featureIdx >= 0
-    && Number.isFinite(coast.distance)
-    && coast.distance < Infinity;
-  const compassHtml = hasRealCoast
-    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
-    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
-
   return `
-    <div class="rp-detail">
-      ${compassHtml}
-      <div class="rp-detail-info">
-        <div class="rp-detail-time">${timeStr} <span>· selected</span></div>
+        <div class="rp-detail-time">${timeStr} <span>· selected</span><span class="rp-lp-slot"></span></div>
         <div class="rp-detail-row">
           <span class="rp-detail-label">Swell</span>
           <span class="rp-detail-val">${h.swellHeightFt.toFixed(1)}</span><span class="rp-detail-unit">ft</span>
@@ -310,9 +415,142 @@ function renderSelectedDetail(h, coast) {
           <span class="rp-detail-val">${h.windSpeedMph.toFixed(0)}</span><span class="rp-detail-unit">mph</span>
           <span class="rp-detail-sub">${compassDir(h.windDir)} · ${windLabel}</span>
         </div>
-      </div>
+  `;
+}
+
+function renderSelectedDetail(h, coast) {
+  // findNearestCoast does a tiered search up to ~2200km and almost
+  // always returns a real coast. Only the "true mid-ocean" sentinel
+  // (no coast within 20°) falls through to the schematic SVG.
+  const hasRealCoast = coast
+    && coast.featureIdx >= 0
+    && Number.isFinite(coast.distance)
+    && coast.distance < Infinity;
+  const compassHtml = hasRealCoast
+    ? renderMapCompassHTML(150, h, coast, _detailSlotId)
+    : renderCompass(150, h, coast || { coastBearing: 0 }, false);
+
+  return `
+    <div class="rp-detail">
+      ${compassHtml}
+      <div class="rp-detail-info">${renderDetailInfo(h)}</div>
     </div>
   `;
+}
+
+// ── Swell trains (partitioned swell) ──
+
+// Ignore trains below ~4 inches — quantization noise, not surf.
+const TRAIN_MIN_H_M = 0.1;
+// "Long period" threshold for the LP badge (seconds).
+const LP_PERIOD_S = 13;
+
+/**
+ * Fetch + interpolate the swell partitions for a forecast hour at the panel's
+ * point. Resolves to a sorted array of trains (energy H²T descending, up to
+ * 3 partitions + windsea) or null when the run has no swellpart file.
+ * Promise-cached per hour on currentData so scrubbing back is instant.
+ */
+function _getTrains(hour) {
+  const data = currentData;
+  if (!data || !data.dataPath) return Promise.resolve(null);
+  if (data.trainsByHour.has(hour)) return data.trainsByHour.get(hour);
+
+  const promise = (async () => {
+    const fhr = String(hour).padStart(3, '0');
+    const url = `${data.dataPath}/swellpart_f${fhr}.bin`;
+    const grid = data.cachedLoad
+      ? await data.cachedLoad(url)
+      : await loadGrid(url).catch(() => null);
+    if (!grid || grid.arrays.length < 12) return null;
+
+    const trains = [];
+    for (const base of SWELLPART_BASES.partitions) {
+      const sw = grid.interpolateSwellCoastal(data.lon, data.lat, 0.05, base);
+      if (sw && sw.height >= TRAIN_MIN_H_M) trains.push({ kind: 'swell', ...sw });
+    }
+    const ws = grid.interpolateSwellCoastal(data.lon, data.lat, 0.05, SWELLPART_BASES.windsea);
+    if (ws && ws.height >= TRAIN_MIN_H_M) trains.push({ kind: 'windsea', ...ws });
+
+    trains.sort((a, b) => b.height * b.height * b.period - a.height * a.height * a.period);
+    return trains;
+  })();
+
+  data.trainsByHour.set(hour, promise);
+  return promise;
+}
+
+/** Async-populate the trains section + LP badge for the selected hour. */
+async function _fillTrains(selHour) {
+  const data = currentData;
+  const trains = await _getTrains(selHour.hour).catch(() => null);
+
+  // Stale guard: panel closed, moved to another spot, or hour changed while
+  // the fetch was in flight.
+  if (currentData !== data) return;
+  const slot = panelEl.querySelector('#rp-trains-slot');
+  if (!slot) return;
+  const nowSel = _currentSelHour();
+  if (!nowSel || nowSel.hour !== selHour.hour) return;
+
+  if (!trains || trains.length === 0) {
+    // Graceful degrade — and, because hour changes patch in place rather
+    // than rebuilding innerHTML, explicitly clear anything a previous hour
+    // left behind (stale trains rows / LP chip).
+    slot.style.display = 'none';
+    slot.innerHTML = '';
+    const staleLp = panelEl.querySelector('.rp-lp-slot');
+    if (staleLp) staleLp.innerHTML = '';
+    return;
+  }
+
+  const maxEnergy = trains.reduce((m, t) => Math.max(m, t.height * t.height * t.period), 0);
+  const rows = trains.map(t => {
+    const hFt = mToFt(t.height);
+    const isLP = t.kind === 'swell' && t.period >= LP_PERIOD_S;
+    const kindLabel = t.kind === 'windsea' ? 'Windsea' : (isLP ? 'Ground' : 'Swell');
+    const energyPct = maxEnergy > 0
+      ? Math.max(4, (t.height * t.height * t.period / maxEnergy) * 100) : 0;
+    // Arrow points where the swell travels TO (Surfline convention);
+    // t.direction is meteorological FROM.
+    const rot = Math.round((t.direction + 180) % 360);
+    return `
+      <div class="rp-train ${t.kind === 'windsea' ? 'rp-train-windsea' : ''}">
+        <span class="rp-train-arrow" style="transform:rotate(${rot}deg)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M12 2 L17 12 L12 9.5 L7 12 Z"/>
+          </svg>
+        </span>
+        <span class="rp-train-ht">${hFt.toFixed(1)}<span class="rp-train-u">ft</span></span>
+        <span class="rp-train-per">${t.period.toFixed(0)}<span class="rp-train-u">s</span></span>
+        <span class="rp-train-dir">${compassDir(t.direction)} ${Math.round(t.direction)}°</span>
+        <span class="rp-train-kind ${isLP ? 'rp-train-kind-lp' : ''}">${kindLabel}</span>
+        <span class="rp-train-bar"><span style="width:${energyPct.toFixed(0)}%"></span></span>
+      </div>
+    `;
+  }).join('');
+
+  slot.innerHTML = `<div class="rp-sec-title">Swell trains</div><div class="rp-train-rows">${rows}</div>`;
+  slot.style.display = '';
+
+  // LP badge — additive: ratings stay computed from the combined field, but
+  // hours with a real long-period partition get flagged in the detail header.
+  const lp = trains.find(t => t.kind === 'swell' && t.period >= LP_PERIOD_S);
+  const lpSlot = panelEl.querySelector('.rp-lp-slot');
+  if (lpSlot) {
+    lpSlot.innerHTML = lp
+      ? ` <span class="rp-lp-chip" title="Long-period groundswell in the mix">LP ${lp.period.toFixed(0)}s</span>`
+      : '';
+  }
+}
+
+/** The hour entry currently selected in the panel (or null). */
+function _currentSelHour() {
+  if (!currentData) return null;
+  const days = _groupByDay(currentData.hours);
+  const selDay = days[selectedDayIdx] || days[0];
+  if (!selDay) return null;
+  return selDay.hours[selectedHourIdx] || selDay.hours[0] || null;
 }
 
 function renderHourly(day, coast) {
@@ -348,8 +586,16 @@ function renderHourly(day, coast) {
 }
 
 function renderDaily(days, coast) {
+  // A day is "extended" when its data comes from the lower-confidence
+  // 6-hourly GFS range beyond 168h. The divider goes before the first one.
+  const firstExtIdx = days.findIndex(d => d.hours[0].hour > BASE_END);
+
   const rows = days.map((day, dayIdx) => {
+    const isExt = firstExtIdx >= 0 && dayIdx >= firstExtIdx;
     const sel = dayIdx === selectedDayIdx ? 'rp-day-sel' : '';
+    const divider = dayIdx === firstExtIdx
+      ? `<div class="rp-ext-divider"><span>extended · lower confidence</span></div>`
+      : '';
 
     // Get AM (first hour), Noon (middle), PM (last) entries
     const am = day.hours[0];
@@ -370,7 +616,8 @@ function renderDaily(days, coast) {
     const bestSwell = day.hours.reduce((best, h) => h.swellHeightFt > best.swellHeightFt ? h : best, day.hours[0]);
 
     return `
-      <div class="rp-day ${sel}" data-day-idx="${dayIdx}">
+      ${divider}
+      <div class="rp-day ${sel} ${isExt ? 'rp-day-ext' : ''}" data-day-idx="${dayIdx}">
         <div>
           <div class="rp-day-name">${day.dayName}</div>
           <div class="rp-day-date">${day.date}</div>
@@ -386,9 +633,13 @@ function renderDaily(days, coast) {
     `;
   }).join('');
 
+  // Days 8-14 exist whenever the run's cube covers the extended range;
+  // fall back to the old label when it doesn't (older runs).
+  const title = firstExtIdx >= 0 || days.length > 8 ? '14-Day Outlook' : '7-Day Outlook';
+
   return `
     <div class="rp-daily">
-      <div class="rp-sec-title">7-Day Outlook</div>
+      <div class="rp-sec-title">${title}</div>
       <div class="rp-day-labels">
         <div></div><div></div><div></div><div></div><div></div>
         <div class="rp-day-col-label">AM</div>

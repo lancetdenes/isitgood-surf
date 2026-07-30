@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Is It Good? — Surf Forecast</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+  <link rel="stylesheet" href="vendor/maplibre-gl/maplibre-gl.css">
   <link rel="stylesheet" href="css/style.css">
   <!-- Loaded before app.js so SURF_CONFIG is available at startup.
        Edit js/surf-config.js to point at R2 for Vercel deployment. -->
@@ -40,6 +40,22 @@
         <button class="ctrl-btn" data-layer="swell">Swell</button>
       </div>
 
+      <!-- Swell sub-layer: shown only while the swell layer is active and the
+           run has partitioned data (hidden for old runs without swellpart) -->
+      <div class="btn-group swell-mode-group" id="swell-mode-selector" style="display:none">
+        <button class="ctrl-btn active" data-swellmode="combined">Combined</button>
+        <button class="ctrl-btn" data-swellmode="ground">Groundswell</button>
+        <button class="ctrl-btn" data-swellmode="windsea">Windsea</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <button class="ctrl-btn" id="buoys-btn" title="NDBC buoy observations">Buoys</button>
+
+      <!-- Photos overlay toggle — revealed by media-map.js when the media
+           API is provisioned; independent of the exclusive wind/swell pair. -->
+      <button class="ctrl-btn" id="photos-toggle" hidden>📷 Photos</button>
+
       <div class="divider"></div>
 
       <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where its pumping</button>
@@ -60,7 +76,11 @@
       </svg>
     </button>
     <div class="timeline-track">
-      <input type="range" id="hour-slider" min="0" max="168" step="3" value="0">
+      <!-- Index-based slider over the non-uniform hour list in js/hours.js
+           (0-168h @3h then 174-336h @6h). min/max are re-asserted from
+           N_STEPS at init in ui.js; 84 = last index of the 85-step list. -->
+      <input type="range" id="hour-slider" min="0" max="84" step="1" value="0">
+      <div class="timeline-ext-label" id="timeline-ext-label" aria-hidden="true">extended</div>
       <div class="timeline-ticks" id="timeline-ticks"></div>
     </div>
     <div class="hour-display" id="hour-display">
@@ -87,6 +107,12 @@
   <div class="rating-panel" id="rating-panel">
     <button class="close-btn" id="rating-close">&times;</button>
     <div class="rating-body"></div>
+  </div>
+
+  <!-- Buoy observation panel -->
+  <div class="rating-panel buoy-panel" id="buoy-panel">
+    <button class="close-btn" id="buoy-close">&times;</button>
+    <div class="buoy-body"></div>
   </div>
 
   <!-- Where it's pumping panel -->
@@ -123,12 +149,19 @@
         <label>Captured <input type="datetime-local" id="upload-time"></label>
         <div class="upload-stamp-tag" id="upload-stamp-tag"></div>
       </div>
-      <div class="upload-minimap" id="upload-minimap"></div>
+      <div class="upload-location" id="upload-location">
+        <span class="upload-location-label" id="upload-location-label"></span>
+        <button class="ctrl-btn" id="upload-location-btn">set location</button>
+      </div>
       <input type="text" id="upload-caption" maxlength="140" placeholder="Caption (optional)">
       <button class="ctrl-btn" id="upload-submit" disabled>Upload</button>
       <div class="upload-status" id="upload-status"></div>
     </div>
   </div>
+
+  <!-- Floating upload button — revealed by media-map.js when the media API
+       is provisioned -->
+  <button id="media-fab" title="Add a surf photo" hidden>📷</button>
 
   <!-- Sign-in modal -->
   <div class="signin-modal" id="signin-modal" hidden>
@@ -143,7 +176,7 @@
   </div>
 
 
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="vendor/maplibre-gl/maplibre-gl.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

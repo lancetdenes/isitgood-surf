@@ -10,30 +10,51 @@
  *   invalidatePumpingCache
  */
 
+import { baseHours, extendedHours } from './hours.js';
+
 const TO_RAD = Math.PI / 180;
 const TO_DEG = 180 / Math.PI;
 
-/** Angular bilinear interpolation of a direction field (sin/cos weighted sums). */
-function interpolateSwellDir(grid, lon, lat) {
+/**
+ * Land-masked swell interpolation (renormalized bilinear + angular mean).
+ *
+ * The grid stores land cells as height=0, direction=0°, period=0. Plain
+ * 4-corner bilinear over a coastal cell (4 out of 5 named spots sit in one)
+ * understates height/period and drags the direction toward the fake 0°
+ * north. Mirror forecast.js's cube reader instead: weight only the ocean
+ * corners (height ≥ minH) and renormalize, so rank-time values match the
+ * panel's. Returns { height, direction, period } or null when every corner
+ * is land (inland spot — unratable).
+ */
+export function interpolateSwellMasked(grid, lon, lat, minH = 0.05) {
   let fi = (lon - grid.lo1) / grid.dx;
   const fj = (grid.la1 - lat) / grid.dy;
   while (fi < 0) fi += grid.nx;
   while (fi >= grid.nx) fi -= grid.nx;
-  if (fj < 0 || fj >= grid.ny - 1) return 0;
+  if (fj < 0 || fj >= grid.ny - 1) return null;
   const i0 = Math.floor(fi), j0 = Math.floor(fj);
   const fx = fi - i0, fy = fj - j0;
   const i1 = (i0 + 1) % grid.nx;
   const j1 = Math.min(j0 + 1, grid.ny - 1);
-  const a = grid.arrays[1];
-  const w00 = (1 - fx) * (1 - fy), w10 = fx * (1 - fy);
-  const w01 = (1 - fx) * fy, w11 = fx * fy;
-  const i00 = j0 * grid.nx + i0, i10 = j0 * grid.nx + i1;
-  const i01 = j1 * grid.nx + i0, i11 = j1 * grid.nx + i1;
-  const sinSum = w00 * Math.sin(a[i00] * TO_RAD) + w10 * Math.sin(a[i10] * TO_RAD)
-               + w01 * Math.sin(a[i01] * TO_RAD) + w11 * Math.sin(a[i11] * TO_RAD);
-  const cosSum = w00 * Math.cos(a[i00] * TO_RAD) + w10 * Math.cos(a[i10] * TO_RAD)
-               + w01 * Math.cos(a[i01] * TO_RAD) + w11 * Math.cos(a[i11] * TO_RAD);
-  return (Math.atan2(sinSum, cosSum) * TO_DEG + 360) % 360;
+  const idx = [j0 * grid.nx + i0, j0 * grid.nx + i1, j1 * grid.nx + i0, j1 * grid.nx + i1];
+  const w = [(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy];
+  const H = grid.arrays[0], D = grid.arrays[1], P = grid.arrays[2];
+
+  let oceanW = 0;
+  for (let k = 0; k < 4; k++) if (H[idx[k]] >= minH) oceanW += w[k];
+  if (oceanW <= 0) return null;
+
+  let height = 0, period = 0, sinSum = 0, cosSum = 0;
+  for (let k = 0; k < 4; k++) {
+    if (H[idx[k]] < minH) continue;
+    const rw = w[k] / oceanW;
+    height += rw * H[idx[k]];
+    period += rw * P[idx[k]];
+    sinSum += rw * Math.sin(D[idx[k]] * TO_RAD);
+    cosSum += rw * Math.cos(D[idx[k]] * TO_RAD);
+  }
+  const direction = (Math.atan2(sinSum, cosSum) * TO_DEG + 360) % 360;
+  return { height, direction, period };
 }
 
 // Mirrors ratings.js sD/wD/oD. Kept inline so this ESM module has no dependency
@@ -64,18 +85,27 @@ function scoreSpot(spot, windGrid, swellGrid) {
   // are excluded from the ranking rather than rated against a sentinel.
   if (spot.o == null) return null;
   const w = windGrid?.interpolate?.(spot.ln, spot.la);
-  const s = swellGrid?.interpolate?.(spot.ln, spot.la);
-  if (!w || !s) return null;
+  if (!w) return null;
+
+  // Land-masked swell (renormalized over ocean corners) so the leaderboard
+  // scores the same values the rating panel shows. Grids without raw arrays
+  // (test doubles) fall back to their own interpolate().
+  let swHeightM, swDir, swPeriod;
+  if (swellGrid?.arrays) {
+    const s = interpolateSwellMasked(swellGrid, spot.ln, spot.la);
+    if (!s) return null;
+    swHeightM = s.height; swDir = s.direction; swPeriod = s.period;
+  } else {
+    const s = swellGrid?.interpolate?.(spot.ln, spot.la);
+    if (!s) return null;
+    swHeightM = s[0]; swDir = s[1]; swPeriod = s[2];
+  }
+  const swHeightFt = swHeightM * 3.28084;
 
   const u = w[0], v = w[1];
   const windMs = Math.sqrt(u * u + v * v);
   const windMph = windMs * 2.23694;
   const windDir = (Math.atan2(-u, -v) * TO_DEG + 360) % 360;
-
-  const swHeightM = s[0];
-  const swHeightFt = swHeightM * 3.28084;
-  const swPeriod = s[2];
-  const swDir = swellGrid.arrays ? interpolateSwellDir(swellGrid, spot.ln, spot.la) : s[1];
 
   // Optimal swell approaches from opposite of offshore (waves from sea).
   // GSHHG-built spots carry an explicit `sw` field; legacy NE-built spots
@@ -317,10 +347,14 @@ async function onRowClick(la, ln, peakHour) {
   // Import lazily to avoid a top-level circular import with app.js.
   const { openPanel, updatePanelSpotName } = await import('./panel.js');
   const { loadCoastline, findNearestCoast, reverseGeocode } = await import('./coastline.js');
+  // Coastline is best-effort; the panel works with a null coast. Keep the
+  // lookup inside the try — findNearestCoast throws when the GeoJSON fetch
+  // failed and the hires binary isn't ready yet.
+  let coast = null;
   try {
     await loadCoastline();
-  } catch (e) { /* coastline is best-effort; panel works without it */ }
-  const coast = findNearestCoast(la, ln, _appRef?.swellGrid);
+    coast = findNearestCoast(la, ln, _appRef?.swellGrid);
+  } catch (e) { /* fall through with null coast */ }
   const geocodePromise = reverseGeocode(la, ln);
   await openPanel(la, ln, coast, _appRef.dataPath, _appRef.runTime, _appRef.hour,
                   (url) => _appRef._cachedLoadGrid(url));
@@ -331,16 +365,22 @@ function spinnerHtml(text) {
   return `<span class="pumping-spinner"></span>${text}`;
 }
 
+// Render-generation counter: tab/source switches during a long peak
+// computation must not let the stale run scribble over the new tab's list.
+let _renderGen = 0;
+
 async function renderCurrentMode() {
   const status = document.getElementById('pumping-status');
   const list = document.getElementById('pumping-list');
   if (!status || !list) return;
 
+  const gen = ++_renderGen;
   try {
     status.innerHTML = spinnerHtml('Loading spots...');
     list.innerHTML = '';
 
     const allSpots = await loadSpotsOnce();
+    if (gen !== _renderGen) return;
     const spots = allSpots.filter(s => s._src === _currentSource);
 
     if (_currentMode === 'now') {
@@ -354,9 +394,9 @@ async function renderCurrentMode() {
       list.innerHTML = ranked.map((e, i) => rowHtml(e, i + 1)).join('');
       wireRowClicks(list);
     } else if (_currentMode === 'week') {
-      await renderPeakMode('week', spots);
+      await renderPeakMode('week', spots, gen);
     } else if (_currentMode === 'next') {
-      await renderPeakMode('next', spots);
+      await renderPeakMode('next', spots, gen);
     }
   } catch (err) {
     console.error('pumping render error', err);
@@ -367,12 +407,8 @@ async function renderCurrentMode() {
 }
 
 function hourRangeFor(mode) {
-  if (mode === 'week') return Array.from({ length: 57 }, (_, i) => i * 3);
-  if (mode === 'next') {
-    const arr = [];
-    for (let h = 174; h <= 336; h += 6) arr.push(h);
-    return arr;
-  }
+  if (mode === 'week') return baseHours();       // 0-168h @3h
+  if (mode === 'next') return extendedHours();   // 174-336h @6h
   return [];
 }
 
@@ -419,10 +455,11 @@ async function rankPeakProgress(spots, loadHour, hours, onProgress) {
   );
 }
 
-async function renderPeakMode(mode, spots) {
+async function renderPeakMode(mode, spots, gen) {
   const status = document.getElementById('pumping-status');
   const list = document.getElementById('pumping-list');
   const key = cacheKey(mode);
+  const isStale = () => gen !== _renderGen;
 
   if (_peakCache.has(key)) {
     const cached = _peakCache.get(key);
@@ -433,6 +470,7 @@ async function renderPeakMode(mode, spots) {
   }
 
   const dataBase = mode === 'next' ? await resolveGfsPath() : _appRef.dataPath;
+  if (isStale()) return;
   if (!dataBase) {
     status.textContent = 'Extended forecast not available — GFS manifest not reachable.';
     list.innerHTML = '';
@@ -452,8 +490,13 @@ async function renderPeakMode(mode, spots) {
 
   status.innerHTML = spinnerHtml(`Computing peak (${mode === 'week' ? '7-day' : '7-14 day'})… 0/${hours.length}`);
   const results = await rankPeakProgress(spots, loadHour, hours, (n) => {
-    status.innerHTML = spinnerHtml(`Computing peak… ${n}/${hours.length}`);
+    if (!isStale()) status.innerHTML = spinnerHtml(`Computing peak… ${n}/${hours.length}`);
   });
+  if (isStale()) {
+    // Still cache the finished computation for when the user switches back.
+    if (results.length > 0) _peakCache.set(key, results);
+    return;
+  }
 
   if (results.length === 0) {
     status.textContent = mode === 'next'

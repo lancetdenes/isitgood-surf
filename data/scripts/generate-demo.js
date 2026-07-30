@@ -5,22 +5,30 @@
  * so the app works out of the box without downloading real GRIB data.
  *
  * Run: node data/scripts/generate-demo.js
- * Output: data/demo/wind_f000.bin ... wind_f168.bin
- *         data/demo/swell_f000.bin ... swell_f168.bin
+ * Output: data/demo/wind_f000.bin ... wind_f336.bin
+ *         data/demo/swell_f000.bin ... swell_f336.bin
+ *         data/demo/points.bin (SCUB cube over all 85 hours)
+ *
+ * Hours follow the shared layout (0-168 @3h, 174-336 @6h) so the extended
+ * timeline is testable locally end-to-end.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { FORECAST_HOURS, BASE_END } = require('./lib/forecast-hours');
 
 const DEMO_DIR = path.join(__dirname, '..', 'demo');
 
-// Grid dimensions (1-degree global grid)
-const NX = 360;
-const NY = 181;
+// Grid dimensions. Default is a 1° global grid (fast to generate). Set
+// DEMO_RES=hi for a 0.25° grid matching real GFS output (1440×721) — useful
+// for performance testing where decode/render cost depends on grid size.
+const HI_RES = process.env.DEMO_RES === 'hi';
+const NX = HI_RES ? 1440 : 360;
+const NY = HI_RES ? 721 : 181;
 const LO1 = 0;     // first lon
 const LA1 = 90;    // first lat (north to south)
-const DX = 1.0;
-const DY = 1.0;
+const DX = HI_RES ? 0.25 : 1.0;
+const DY = HI_RES ? 0.25 : 1.0;
 
 /** Pick an int16 scale that preserves the array's range with headroom. */
 function deriveScale(arr) {
@@ -170,12 +178,45 @@ function generateWindField(hourOffset) {
   return { u, v };
 }
 
+/**
+ * Generate partitioned swell fields plus a physically-coherent combined field.
+ *
+ * Four components per ocean cell:
+ *   train 1 — long-period groundswell (15-18 s) radiating from a slowly
+ *             drifting storm (N Pacific in the north, Southern Ocean in the
+ *             south). Direction points back at the storm (meteorological
+ *             "from"). Deliberately modest heights over a huge area so the
+ *             "1 ft @ 18 s forerunner under a big windsea" case is testable.
+ *   train 2 — mid-period (10-12 s) secondary swell from a different bearing.
+ *   train 3 — small short-mid (8-9 s) residual train, present only in
+ *             patches, so the panel's "up to 3 partitions" sorting and
+ *             absence handling both get exercised.
+ *   windsea — locally generated 5-8 s chop, biggest in the demo's windy
+ *             mid-latitude bands, from a direction unrelated to train 1.
+ *
+ * Combined = RSS of the component heights; direction/period taken from the
+ * dominant-energy (H²T) component — same convention as GFS's HTSGW/DIRPW/PERPW.
+ */
 function generateSwellField(hourOffset) {
-  const height = new Float32Array(NX * NY);
-  const direction = new Float32Array(NX * NY);
-  const period = new Float32Array(NX * NY);
+  const mk = () => new Float32Array(NX * NY);
+  const out = {
+    height: mk(), direction: mk(), period: mk(),
+    parts: [
+      { h: mk(), d: mk(), p: mk() },
+      { h: mk(), d: mk(), p: mk() },
+      { h: mk(), d: mk(), p: mk() },
+    ],
+    windsea: { h: mk(), d: mk(), p: mk() },
+  };
 
   const phase = hourOffset * 0.02;
+  const TO_DEG = 180 / Math.PI;
+
+  // Distant storm centers (drift slowly over the week)
+  const storms = [
+    { lat: 42, lon: 185 + hourOffset * 0.05, size: 45, hMax: 2.2 },  // N Pacific
+    { lat: -52, lon: 210 + hourOffset * 0.04, size: 55, hMax: 2.6 }, // Southern Ocean
+  ];
 
   for (let j = 0; j < NY; j++) {
     const lat = LA1 - j * DY;
@@ -186,47 +227,75 @@ function generateSwellField(hourOffset) {
       const lonRad = lon * Math.PI / 180;
       const idx = j * NX + i;
 
-      if (!isOcean(lat, lon)) {
-        height[idx] = 0;
-        direction[idx] = 0;
-        period[idx] = 0;
-        continue;
+      if (!isOcean(lat, lon)) continue; // all fields stay 0 (land convention)
+
+      // ── Train 1: groundswell from the nearest storm ──
+      let h1 = 0, d1 = 0, p1 = 0;
+      for (const s of storms) {
+        let dLon = lon - s.lon;
+        if (dLon > 180) dLon -= 360;
+        if (dLon < -180) dLon += 360;
+        const dLat = lat - s.lat;
+        const dist = Math.sqrt(dLat * dLat + dLon * dLon * Math.cos(latRad) ** 2);
+        const h = s.hMax * Math.exp(-0.5 * Math.pow(dist / s.size, 2));
+        if (h > h1) {
+          h1 = h;
+          // Direction FROM = bearing from cell back toward the storm center
+          d1 = (Math.atan2(-dLon * Math.cos(latRad), -dLat) * TO_DEG + 360) % 360;
+          // Forerunner physics-flavored: longer period further from the source
+          p1 = 14 + Math.min(4, dist / 25) + Math.sin(phase) * 0.5;
+        }
+      }
+      if (h1 < 0.15) { h1 = 0; d1 = 0; p1 = 0; }
+
+      // ── Train 2: mid-period secondary swell ──
+      const southSwath = Math.exp(-0.5 * Math.pow((lat + 10) / 35, 2));
+      let h2 = 0.9 * southSwath * (0.7 + 0.3 * Math.sin(lonRad * 2 + phase));
+      let d2 = (195 + 25 * Math.sin(lonRad * 3 + phase)) % 360;
+      let p2 = 10.5 + Math.sin(lonRad + phase) * 1.2;
+      if (h2 < 0.15) { h2 = 0; d2 = 0; p2 = 0; }
+
+      // ── Train 3: small residual train, patchy ──
+      const patch = Math.sin(lonRad * 4 + latRad * 5 + phase * 1.3);
+      let h3 = patch > 0.45 ? 0.5 * (patch - 0.45) / 0.55 : 0;
+      let d3 = h3 > 0 ? (80 + 30 * Math.sin(latRad * 4 + phase)) % 360 : 0;
+      let p3 = h3 > 0 ? 8.5 + Math.sin(lonRad * 2) * 0.7 : 0;
+      if (h3 < 0.15) { h3 = 0; d3 = 0; p3 = 0; }
+
+      // ── Windsea: local chop in windy bands ──
+      const windyBand = Math.exp(-0.5 * Math.pow((Math.abs(lat) - 45) / 14, 2));
+      let hw = Math.max(0, 0.4 + 1.6 * windyBand * (0.6 + 0.4 * Math.sin(lonRad * 5 + latRad * 3 + phase))
+                            + (rand() - 0.5) * 0.2);
+      let dw = lat > 0
+        ? (250 + 35 * Math.sin(lonRad * 2 + phase)) % 360   // westerly chop
+        : (235 + 30 * Math.sin(lonRad * 3 + phase)) % 360;
+      let pw = Math.max(4, 4.5 + hw * 1.8);
+      if (hw < 0.15) { hw = 0; dw = 0; pw = 0; }
+
+      // ── Combined field ──
+      const hc = Math.sqrt(h1 * h1 + h2 * h2 + h3 * h3 + hw * hw);
+      const comps = [
+        { h: h1, d: d1, p: p1 },
+        { h: h2, d: d2, p: p2 },
+        { h: h3, d: d3, p: p3 },
+        { h: hw, d: dw, p: pw },
+      ];
+      let dom = comps[0];
+      for (const c of comps) {
+        if (c.h * c.h * c.p > dom.h * dom.h * dom.p) dom = c;
       }
 
-      // Base swell from dominant storm regions
-      // North Atlantic swell
-      const naSwell = 2.5 * Math.exp(-0.5 * Math.pow((lat - 50) / 15, 2)) *
-                      Math.exp(-0.5 * Math.pow((lon - 330) / 30, 2));
-
-      // South Pacific swell
-      const spSwell = 2.0 * Math.exp(-0.5 * Math.pow((lat + 45) / 12, 2));
-
-      // Wind swell (locally generated)
-      const windSwell = 0.8 + 0.5 * Math.sin(lonRad * 5 + latRad * 3 + phase);
-
-      // Total
-      const h = Math.max(0, naSwell + spSwell * 0.3 + windSwell + (rand() - 0.5) * 0.4);
-
-      // Direction — generally from dominant storm direction
-      let dir;
-      if (lat > 20) {
-        dir = 270 + 30 * Math.sin(lonRad * 2 + phase);  // From NW
-      } else if (lat < -20) {
-        dir = 210 + 20 * Math.sin(lonRad * 3 + phase);  // From SW
-      } else {
-        dir = 240 + 40 * Math.sin(lonRad * 2 + phase);  // Variable
-      }
-
-      // Period correlates with swell height
-      const p = 6 + h * 2.5 + (rand() - 0.5) * 2;
-
-      height[idx] = h;
-      direction[idx] = ((dir % 360) + 360) % 360;
-      period[idx] = Math.max(4, p);
+      out.height[idx] = hc;
+      out.direction[idx] = hc > 0 ? dom.d : 0;
+      out.period[idx] = hc > 0 ? dom.p : 0;
+      out.parts[0].h[idx] = h1; out.parts[0].d[idx] = d1; out.parts[0].p[idx] = p1;
+      out.parts[1].h[idx] = h2; out.parts[1].d[idx] = d2; out.parts[1].p[idx] = p2;
+      out.parts[2].h[idx] = h3; out.parts[2].d[idx] = d3; out.parts[2].p[idx] = p3;
+      out.windsea.h[idx] = hw; out.windsea.d[idx] = dw; out.windsea.p[idx] = pw;
     }
   }
 
-  return { height, direction, period };
+  return out;
 }
 
 /** Parse an SRF2 file we just wrote, returning decoded float32 arrays. */
@@ -338,8 +407,7 @@ if (!fs.existsSync(DEMO_DIR)) {
   fs.mkdirSync(DEMO_DIR, { recursive: true });
 }
 
-const hours = [];
-for (let h = 0; h <= 168; h += 3) hours.push(h);
+const hours = [...FORECAST_HOURS]; // 0-168 @3h + 174-336 @6h (85 steps)
 
 for (const h of hours) {
   const fhr = String(h).padStart(3, '0');
@@ -348,16 +416,27 @@ for (const h of hours) {
   const { u, v } = generateWindField(h);
   writeBinary(path.join(DEMO_DIR, `wind_f${fhr}.bin`), 2, u, v);
 
-  // Swell
-  const { height, direction, period } = generateSwellField(h);
-  writeBinary(path.join(DEMO_DIR, `swell_f${fhr}.bin`), 3, height, direction, period);
+  // Swell (combined) + partitioned swell (3 trains + windsea, 12 params —
+  // same layout process-grib.py writes for real GFS-Wave data). Partition
+  // files mirror the real pipeline: core range (0–168h) only, so the demo
+  // exercises the UI's extended-hour fallback to the combined field.
+  const sw = generateSwellField(h);
+  writeBinary(path.join(DEMO_DIR, `swell_f${fhr}.bin`), 3, sw.height, sw.direction, sw.period);
+  if (h <= BASE_END) {
+    writeBinary(path.join(DEMO_DIR, `swellpart_f${fhr}.bin`), 12,
+      sw.parts[0].h, sw.parts[0].d, sw.parts[0].p,
+      sw.parts[1].h, sw.parts[1].d, sw.parts[1].p,
+      sw.parts[2].h, sw.parts[2].d, sw.parts[2].p,
+      sw.windsea.h, sw.windsea.d, sw.windsea.p);
+  }
 
   process.stdout.write(`  f${fhr}`);
 }
 
 console.log('\n\nDemo data written to data/demo/');
-console.log(`  ${hours.length} wind files + ${hours.length} swell files`);
-console.log(`  Grid: ${NX}x${NY} (1° global)`);
+const nPart = hours.filter(h => h <= BASE_END).length;
+console.log(`  ${hours.length} wind files + ${hours.length} swell files + ${nPart} swellpart files (0-${BASE_END}h)`);
+console.log(`  Grid: ${NX}x${NY} (${DX}° global)`);
 
 buildDemoCube(path.join(DEMO_DIR, 'points.bin'), hours);
 

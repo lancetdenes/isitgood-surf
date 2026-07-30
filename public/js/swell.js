@@ -6,6 +6,8 @@
  * to distinguish from the white wind dashes.
  */
 
+import { makeFrameProjector } from './fast-project.js';
+
 export class SwellRenderer {
   constructor(canvas, map) {
     this.canvas = canvas;
@@ -29,6 +31,13 @@ export class SwellRenderer {
     this.fadeOpacity = 0.85;       // faster fade
     this.lineWidth = 1.4;
     this.color = 'rgba(180, 220, 255, 0.6)';
+    // Period encoding for partition layers (groundswell/windsea): scale each
+    // crest dash by the local wave period. A 10 s reference maps to the
+    // default dash; 18 s groundswell crests draw ~1.8× longer, 6 s windsea
+    // chop ~0.6× shorter — wavelength grows with period, so long lazy lines
+    // vs short choppy ticks reads instantly. Off for the combined layer so
+    // its look matches prod exactly.
+    this.periodDashes = false;
 
     this._resizeBound = () => this._resize();
     window.addEventListener('resize', this._resizeBound);
@@ -173,6 +182,11 @@ export class SwellRenderer {
 
     const halfDash = (this.dashLen * zoomScale) / 2;
 
+    // One calibrated projector per frame — avoids a map.project +
+    // map.unproject (matrix math + allocations) per particle.
+    const proj = makeFrameProjector(this.map);
+    const pt = { x: 0, y: 0 };
+
     for (const p of this.particles) {
       // Ocean-only interp: returns null if any of the 4 bilinear corners is
       // land, which keeps particles from swimming onto the coastline and
@@ -215,19 +229,23 @@ export class SwellRenderer {
       const speed = (this.baseSpeed + t * (this.maxSpeed - this.baseSpeed)) * speedZoom;
 
       // Advance particle position
-      const pt0 = this.map.project([p.lng, p.lat]);
-      const cx = pt0.x + dx * speed;
-      const cy = pt0.y + dy * speed;
+      proj.project(p.lng, p.lat, pt);
+      const cx = pt.x + dx * speed;
+      const cy = pt.y + dy * speed;
 
-      const geo1 = this.map.unproject([cx, cy]);
-      p.lng = geo1.lng;
-      p.lat = geo1.lat;
+      proj.unproject(cx, cy, p); // writes p.lng / p.lat in place
       p.age++;
 
-      // Draw a dash perpendicular to the travel direction (like a wave crest)
+      // Draw a dash perpendicular to the travel direction (like a wave crest).
+      // With periodDashes on, dash length encodes the local wave period
+      // (clamped 0.5×–2× around a 10 s reference).
+      let hd = halfDash;
+      if (this.periodDashes && sw.period > 0) {
+        hd = halfDash * Math.min(2.0, Math.max(0.5, sw.period / 10));
+      }
       ctx.beginPath();
-      ctx.moveTo(cx - dy * halfDash, cy + dx * halfDash);
-      ctx.lineTo(cx + dy * halfDash, cy - dx * halfDash);
+      ctx.moveTo(cx - dy * hd, cy + dx * hd);
+      ctx.lineTo(cx + dy * hd, cy - dx * hd);
       ctx.stroke();
 
       // Reset if expired or off-screen

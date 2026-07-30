@@ -7,7 +7,7 @@
  */
 
 import { computeAdaptiveBearing, validateSeaward } from './coastline-shared.js';
-import { isHiresReady, findNearestCoastHires, getCoastSnippetHires } from './coastline-hires.js';
+import { isHiresReady, findNearestCoastHires, getCoastSnippetHires, loadHiresCoastline } from './coastline-hires.js';
 
 let coastData = null;
 let _loadPromise = null;
@@ -18,13 +18,21 @@ export function _setCoastData(data) {
   _loadPromise = Promise.resolve();
 }
 
-/** Load the bundled coastline GeoJSON. Idempotent; concurrent callers share one fetch. */
+/**
+ * Ensure SOME coastline dataset is available. The hires GSHHG binary is the
+ * primary source; the Natural Earth GeoJSON (5.4 MB) is only fetched as a
+ * fallback when the hires load fails — it no longer loads eagerly at
+ * startup, keeping ~20 MB of coastline off the initial-load network path.
+ * Idempotent; concurrent callers share one promise.
+ */
 export function loadCoastline() {
+  if (isHiresReady() || coastData) return Promise.resolve();
   if (_loadPromise) return _loadPromise;
-  _loadPromise = fetch('/assets/coastline.geojson')
-    .then(r => r.json())
-    .then(d => { coastData = d; })
-    .catch(e => { _loadPromise = null; throw e; });
+  _loadPromise = loadHiresCoastline()
+    .catch(() => fetch('/assets/coastline.geojson')
+      .then(r => r.json())
+      .then(d => { coastData = d; })
+      .catch(e => { _loadPromise = null; throw e; }));
   return _loadPromise;
 }
 
