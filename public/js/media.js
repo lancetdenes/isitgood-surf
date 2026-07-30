@@ -6,7 +6,15 @@
  * real endpoint (200 or 401). This keeps the static site clean when the
  * serverless functions/env aren't provisioned yet.
  */
-import exifr from '/vendor/exifr/full.esm.js';
+// exifr (75KB) is only needed when a user actually picks a photo to upload —
+// import it lazily so it stays off the initial-load module graph.
+let _exifrPromise = null;
+function loadExifr() {
+  if (!_exifrPromise) {
+    _exifrPromise = import('/vendor/exifr/full.esm.js').then(m => m.default);
+  }
+  return _exifrPromise;
+}
 
 // ── API availability + session ──
 
@@ -150,7 +158,9 @@ export async function openUploadSheet({ lat, lng }) {
       stampTag.textContent = 'user-reported time & place';
     } else {
       // EXIF prefill from the ORIGINAL file (downscaling strips metadata)
-      const exif = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'latitude', 'longitude'] }).catch(() => null);
+      const exif = await loadExifr()
+        .then(exifr => exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'latitude', 'longitude'] }))
+        .catch(() => null);
       try {
         picked = { ...(await downscalePhoto(file)), kind: 'photo' };
       } catch {

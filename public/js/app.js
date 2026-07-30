@@ -17,7 +17,7 @@ import { GridStore } from './grid-store.js';
 import { initUI, updateLegendVisibility, setStatus } from './ui.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
-import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
+import { setKDBush } from './coastline-hires.js';
 
 setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
@@ -68,9 +68,6 @@ class App {
       initUI(this);
       initPanel();
       initPumping(this);
-
-      // Load coastline data in background
-      loadCoastline().catch(e => console.warn('Coastline load failed:', e));
 
       this.map.on('click', (e) => this._onMapClick(e));
 
@@ -171,6 +168,7 @@ class App {
       this._applyGrids(cachedWind, cachedSwell);
       setStatus(`f${fhr} loaded`);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
+      this._kickCoastlineLoad();
       return;
     }
 
@@ -198,10 +196,25 @@ class App {
       this._applyGrids(windGrid, swellGrid);
       setStatus(`f${fhr} loaded`);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
+      this._kickCoastlineLoad();
     } catch (err) {
       console.error('Load error:', err);
       setStatus('Error loading forecast hour');
     }
+  }
+
+  /**
+   * Start the (14.5 MB) hires coastline download once the first grids are
+   * on screen so it doesn't compete with the initial heatmap for bandwidth.
+   * Clicking the map earlier still works: loadCoastline() kicks the same
+   * shared fetch on demand.
+   */
+  _kickCoastlineLoad() {
+    if (this._coastlineKicked) return;
+    this._coastlineKicked = true;
+    const start = () => loadCoastline().catch(e => console.warn('Coastline load failed:', e));
+    if ('requestIdleCallback' in window) requestIdleCallback(start, { timeout: 3000 });
+    else setTimeout(start, 500);
   }
 
   /**
@@ -358,7 +371,4 @@ window.__app = app;
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');
-});
-loadHiresCoastline().catch(err => {
-  console.warn('Failed to load hires coastline; continuing with Natural Earth:', err);
 });
