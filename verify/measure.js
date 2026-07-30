@@ -72,10 +72,13 @@ async function nowInPage(page) {
 /** Dispatch a slider input for hour h; resolve when the heatmap texture has
  *  been updated with that hour's data. Returns latency ms. */
 async function scrubStep(page, h, timeout = 30000) {
-  const t0 = await page.evaluate((h) => {
+  const t0 = await page.evaluate(async (h) => {
+    // The slider is INDEX-based over the non-uniform 85-step timeline
+    // (see public/js/hours.js) — convert the forecast hour to its index.
+    const { hourToIndex } = await import('/js/hours.js');
     const t = performance.now();
     const s = document.getElementById('hour-slider');
-    s.value = String(h);
+    s.value = String(hourToIndex(h));
     s.dispatchEvent(new Event('input', { bubbles: true }));
     return t;
   }, h);
@@ -183,7 +186,8 @@ async function scrubPhase(page, hours) {
       const app = window.__app;
       if (!app) return false;
       const n = app._store?.readyCount ? app._store.readyCount() : (app._gridCache?.size ?? 0);
-      return n >= 114;
+      // Full 14-day run = 85 wind + 85 swell = 170 grids (was 114 at 7 days).
+      return n >= 170;
     },
     null, { timeout: 180000, polling: 200 }
   ).catch(() => { console.warn('preload never hit 114 entries; continuing'); });

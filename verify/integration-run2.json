@@ -1,0 +1,76 @@
+{
+  "label": "integration2",
+  "url": "http://localhost:3007",
+  "when": "2026-07-30T03:57:41.852Z",
+  "grid": {
+    "nx": 1440,
+    "ny": 721,
+    "dx": 0.25
+  },
+  "initialLoad": {
+    "firstGridsMs": 885,
+    "firstHeatmapMs": 884,
+    "longTasks": {
+      "count": 0,
+      "totalMs": 0,
+      "maxMs": 0
+    },
+    "networkBeforeFirstHeatmap": {
+      "requests": 71,
+      "bytes": 1178116
+    }
+  },
+  "scrubCold": {
+    "perStepMs": {
+      "n": 20,
+      "mean": 60.8,
+      "median": 28.2,
+      "p90": 146.5,
+      "max": 309.1
+    },
+    "longTasks": {
+      "count": 0,
+      "totalMs": 0,
+      "maxMs": 0
+    },
+    "steps": 20
+  },
+  "scrubWarm": {
+    "perStepMs": {
+      "n": 20,
+      "mean": 23.9,
+      "median": 23.4,
+      "p90": 39.8,
+      "max": 43.2
+    },
+    "longTasks": {
+      "count": 0,
+      "totalMs": 0,
+      "maxMs": 0
+    },
+    "steps": 20
+  },
+  "scrubPanelOpen": {
+    "perStepMs": {
+      "n": 10,
+      "mean": 18.8,
+      "median": 13.5,
+      "p90": 55.1,
+      "max": 55.1
+    },
+    "longTasks": {
+      "count": 0,
+      "totalMs": 0,
+      "maxMs": 0
+    },
+    "steps": 10,
+    "miniMapsCreatedDuringScrub": 0
+  },
+  "heatmapRenderMs": {
+    "n": 115,
+    "mean": 1.6,
+    "median": 1.3,
+    "p90": 1.8,
+    "max": 12.1
+  }
+}
