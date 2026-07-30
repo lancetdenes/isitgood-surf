@@ -395,6 +395,9 @@ class App {
 }
 
 const app = new App();
+// Debug/test handle (same spirit as __flowTune): lets tooling reach the map
+// and app state without affecting the production path.
+window.__app = app;
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');
