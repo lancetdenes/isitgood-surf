@@ -3,7 +3,7 @@ import { route, json, jsonBody, HttpError } from '../_lib/http.mjs';
 import { readSession } from '../_lib/session.mjs';
 import { getSql } from '../_lib/db.mjs';
 import { completeUpload } from '../_lib/uploadflow.mjs';
-import { headObject, getObjectBuffer, publicUrl } from '../_lib/r2.mjs';
+import { headObject, getObjectBuffer, publicUrl, deleteObject } from '../_lib/r2.mjs';
 
 async function readExifFromR2(key) {
   const buf = await getObjectBuffer(key, 4 * 1024 * 1024);   // EXIF lives in the first bytes
@@ -31,7 +31,7 @@ export default route(async (req, res) => {
 
   const media = await completeUpload(
     // spot_name stays null in v1 — the panel shows coordinates + relative time.
-    { sql: getSql(), headObject, readExif: readExifFromR2, reverseGeocode: async () => null },
+    { sql: getSql(), headObject, readExif: readExifFromR2, reverseGeocode: async () => null, deleteObject },
     { mediaId: String(body.mediaId), userId: sess.userId, lat, lng,
       capturedAt: capturedAt.toISOString(), caption: body.caption,
       claimedStampSource: ['exif', 'device', 'manual'].includes(body.claimedStampSource) ? body.claimedStampSource : 'manual' },

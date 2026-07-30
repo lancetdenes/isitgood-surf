@@ -64,6 +64,20 @@ test('completeUpload is idempotent for already-live media', async () => {
   assert.equal(out.stamp_source, 'exif');
 });
 
+test('completeUpload rejects and deletes an object over the per-kind cap', async () => {
+  let deleted = null;
+  const deps = {
+    ...depsWith(null),
+    headObject: async () => ({ bytes: 200_000_000, contentType: 'image/jpeg' }), // > 15 MB photo cap
+    deleteObject: async (key) => { deleted = key; },
+  };
+  await assert.rejects(() => completeUpload(deps, {
+    mediaId: 'm1', userId: 'u1', lat: 40, lng: -74,
+    capturedAt: '2026-07-01T12:30:00Z', caption: '', claimedStampSource: 'manual',
+  }), /too_big/);
+  assert.equal(deleted, 'media/m1.jpg');
+});
+
 test('completeUpload 400s when the object was never uploaded', async () => {
   const deps = { ...depsWith(null), headObject: async () => null };
   await assert.rejects(() => completeUpload(deps, {

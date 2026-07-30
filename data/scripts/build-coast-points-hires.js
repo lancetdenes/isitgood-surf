@@ -25,6 +25,7 @@ import { walkLineString } from './lib/coastline-walker.js';
 import { loadCountries, loadCities, buildCityIndex, nearestCity } from './lib/reference-data.js';
 import { parseCoastlineBinary } from './lib/coastline-binary.js';
 import { findNearestCoastNode, buildIndex } from './lib/find-nearest-coast-node.js';
+import { loadGridFromFile } from './lib/grid-loader.js';
 
 // pumping.js dedupes the ranking at 25km radius, so finer than ~25km spacing
 // just adds JSON bytes without surfacing more spots. The previous NE build
@@ -63,6 +64,26 @@ function featurePerimeterKm(line) {
   return total;
 }
 
+/**
+ * Load the latest local swell grid (data/gfs/<run>/swell_f*.bin, SRF2 int16)
+ * for seaward wet-testing. Same discovery pattern as fill-named-offshore.js.
+ * Returns null (with a warning) when no local run exists — the build then
+ * emits winding-derived bearings unvalidated, like the legacy behavior.
+ */
+function latestSwellGrid() {
+  const dir = 'data/gfs';
+  try {
+    const runs = fs.readdirSync(dir).filter(x => !x.startsWith('.')).sort();
+    if (!runs.length) return null;
+    const runDir = path.join(dir, runs[runs.length - 1]);
+    const swellFiles = fs.readdirSync(runDir).filter(f => f.startsWith('swell_f')).sort();
+    if (!swellFiles.length) return null;
+    return loadGridFromFile(path.join(runDir, swellFiles[0]));
+  } catch {
+    return null;
+  }
+}
+
 function countryAt(countriesGj, lat, lon) {
   const pt = turfPoint([lon, lat]);
   for (const feat of countriesGj.features) {
@@ -83,6 +104,18 @@ async function main() {
 
   console.log('Building KDBush over segment midpoints...');
   const idx = buildIndex(KDBush, data);
+
+  console.log('Loading swell grid for seaward validation...');
+  const swellGrid = latestSwellGrid();
+  if (swellGrid) {
+    console.log(`  grid: ${swellGrid.nx}x${swellGrid.ny} @ ${swellGrid.dx}°`);
+  } else if (process.env.ALLOW_UNVALIDATED === '1') {
+    console.warn('  WARNING: no local swell grid found — seaward bearings will be UNVALIDATED (~14% face land).');
+  } else {
+    console.error('HALT: no local swell grid under data/gfs/. Download a run (any swell_f*.bin) first,');
+    console.error('or set ALLOW_UNVALIDATED=1 to emit winding-derived bearings without the wet-test.');
+    process.exit(1);
+  }
 
   console.log('Loading countries + cities...');
   const countries = loadCountries();
@@ -121,7 +154,7 @@ async function main() {
   }
 
   const results = [];
-  let kept = 0, dropFar = 0, dropUnreliable = 0;
+  let kept = 0, dropFar = 0, dropUnreliable = 0, dropNoOcean = 0, flipped = 0;
   const t0 = Date.now();
   for (let i = 0; i < candidates.length; i++) {
     if (i % 500 === 0) {
@@ -129,8 +162,13 @@ async function main() {
       process.stdout.write(`\r  scoring ${i}/${candidates.length} (${pct}%) — kept ${kept}`);
     }
     const { lat, lon } = candidates[i];
-    const r = findNearestCoastNode(data, idx, lat, lon);
+    const r = findNearestCoastNode(data, idx, lat, lon, swellGrid);
     if (r.unreliableBearing) { dropUnreliable++; continue; }
+    // Neither the winding-derived seaward nor its flip reaches ocean —
+    // enclosed water / inland; emitting an arbitrary bearing would poison
+    // the pumping ranking, so drop.
+    if (r.bothFailed) { dropNoOcean++; continue; }
+    if (r.seawardFlipped) flipped++;
     if (r.distance / 1000 > MAX_NEAREST_KM) { dropFar++; continue; }
     const near = nearestCity(cityIdx, cities, lat, lon, TOWN_MAX_KM);
     const country = countryAt(countries, lat, lon) || near?.country || 'unknown';
@@ -159,8 +197,10 @@ async function main() {
   const dt = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`\nDone in ${dt}s`);
   console.log(`  kept:                ${kept}`);
+  console.log(`  seaward flipped:     ${flipped}`);
   console.log(`  dropped (>${MAX_NEAREST_KM}km from coast):  ${dropFar}`);
   console.log(`  dropped (unreliable):${dropUnreliable}`);
+  console.log(`  dropped (no ocean):  ${dropNoOcean}`);
 
   fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
   fs.writeFileSync(OUTPUT, JSON.stringify(results));

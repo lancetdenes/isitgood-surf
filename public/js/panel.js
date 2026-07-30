@@ -137,9 +137,16 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
     // clicks are instant when the timeline has already been preloaded.
     const data = await computeForecast(lat, lon, dataPath, cachedLoad);
 
-    // Prefer grid-detected coast (sharper at the actual ocean edge);
-    // fall back to GeoJSON coastline when the point is too far inland.
-    const effectiveCoast = data.coast || coast;
+    // Prefer the coastline lookup (GSHHG segment projection with adaptive
+    // bearing smoothing + seaward wet-test) — it is far more accurate than
+    // the coarse grid-ring estimate, which samples 24 directions on a 0.25°
+    // grid in *degree* space (up to ~22° of latitude-dependent bias, median
+    // ~30° disagreement across named spots). The grid detection is only a
+    // fallback for when the coastline lookup failed to find a reliable
+    // bearing (mid-ocean sentinel, or both seaward wet-tests failed).
+    const effectiveCoast = (coast && !coast.unreliableBearing)
+      ? coast
+      : (data.coast || coast);
 
     const hours = data.hours.map(raw => {
       // Wave power per unit crest length (deep-water approximation).

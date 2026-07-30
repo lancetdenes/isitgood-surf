@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import KDBush from 'kdbush';
 import { parseCoastlineBinary } from '../../../data/scripts/lib/coastline-binary.js';
-import { _setHiresData, isHiresReady, _resetHires, setKDBush } from '../coastline-hires.js';
+import { _setHiresData, isHiresReady, _resetHires, setKDBush, _getHires } from '../coastline-hires.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = join(__dirname, '..', '..', '..', 'public', 'assets', 'coastline-hires.bin');
@@ -58,6 +58,38 @@ test('getCoastSnippetHires returns subpaths centered on the coast point', () => 
   assert.ok(allPts.length >= 2);
   const maxCoord = Math.max(...allPts.map(p => Math.max(Math.abs(p.x), Math.abs(p.y))));
   assert.ok(maxCoord < 8, `snippet max extent ${maxCoord} km too wide`);
+});
+
+test('Greenwich-crossing segments do not create phantom coast at lon 180', () => {
+  _resetHires();
+  const buf = readFileSync(BIN_PATH);
+  const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  const data = parseCoastlineBinary(ab);
+  _setHiresData(data);
+
+  // The shipped binary has 26 features whose vertices straddle the prime
+  // meridian (e.g. 359.93 → 0.00). Their raw arithmetic midpoints land at
+  // lon ≈ 180 — the open mid-Pacific. After unwrapping, no indexed midpoint
+  // from a seam-crossing segment may sit in the 175–185 band.
+  const { index: idx } = _getHires();
+  const hits = idx.range(175, -90, 185, 90);
+  for (const ci of hits) {
+    const f = idx.segKey[ci * 2], s = idx.segKey[ci * 2 + 1];
+    const [lA] = data.vertex(f, s);
+    const [lB] = data.vertex(f, s + 1);
+    assert.ok(Math.abs(lA - lB) <= 180,
+      `phantom midpoint from seam segment f=${f} s=${s} (lons ${lA}, ${lB})`);
+  }
+
+  // The review's direct probe: a mid-Pacific point that used to hit a
+  // fabricated French/Belgian coast segment 1.3 km away.
+  const r = findNearestCoastHires(49.33, 179.96, null);
+  assert.ok(r.distance > 50_000,
+    `expected mid-Pacific probe to be far from any coast, got ${(r.distance / 1000).toFixed(1)} km`);
+
+  // A click just west of Greenwich on the Normandy coast still resolves close.
+  const gw = findNearestCoastHires(49.4, 0.0, null);
+  assert.ok(gw.distance < 10_000, `Greenwich coast click got ${(gw.distance / 1000).toFixed(1)} km`);
 });
 
 const HIRES_FIXTURES = [

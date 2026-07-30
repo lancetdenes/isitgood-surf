@@ -11,3 +11,8 @@ export function validateUploadRequest({ kind, contentType, bytes }) {
   if (!Number.isFinite(bytes) || bytes <= 0 || bytes > rule.maxBytes) throw new HttpError(400, 'too_big');
   return { ext: rule.types[contentType] };
 }
+
+/** Per-kind byte ceiling (used to re-check the *actual* uploaded size). */
+export function maxBytesFor(kind) {
+  return RULES[kind]?.maxBytes ?? null;
+}

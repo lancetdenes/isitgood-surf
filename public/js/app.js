@@ -136,17 +136,38 @@ class App {
     return `${this.dataPath}/swell_f${String(hour).padStart(3, '0')}.bin`;
   }
 
-  /** Apply whichever grids are provided to the renderers, then refresh layers. */
+  /**
+   * Apply grids to the renderers, then refresh layers. Always assigns —
+   * a missing hour (null grid) must clear the layer rather than silently
+   * keep the previous hour's field on screen labelled as this hour. All
+   * renderers and the heatmap handle a null grid.
+   */
   _applyGrids(windGrid, swellGrid) {
-    if (windGrid) {
-      this.windGrid = windGrid;
-      this.wind.setGrid(windGrid);
-    }
-    if (swellGrid) {
-      this.swellGrid = swellGrid;
-      this.swell.setGrid(swellGrid);
-    }
+    this.windGrid = windGrid;
+    this.wind.setGrid(windGrid);
+    this.swellGrid = swellGrid;
+    this.swell.setGrid(swellGrid);
     this._updateVisibility();
+  }
+
+  /**
+   * Status honesty: say exactly what is showing for this hour —
+   * "loaded", "swell showing fMMM (nearest available)", or
+   * "no wind/swell data for this hour". Never label a neighboring
+   * hour's field as this hour without saying so.
+   */
+  _setHourStatus(hour, windGrid, swellRes) {
+    const fhr = String(hour).padStart(3, '0');
+    const missing = [];
+    if (!windGrid) missing.push('wind');
+    if (!swellRes.grid) missing.push('swell');
+    if (missing.length) {
+      setStatus(`f${fhr} — no ${missing.join('/')} data for this hour`);
+    } else if (swellRes.actualHour !== hour) {
+      setStatus(`f${fhr} loaded — swell showing f${String(swellRes.actualHour).padStart(3, '0')} (nearest available)`);
+    } else {
+      setStatus(`f${fhr} loaded`);
+    }
   }
 
   async _loadHour(hour) {
@@ -161,40 +182,44 @@ class App {
     // Re-center the background prefetcher on the new hour.
     this._schedulePrefetch(hour);
 
-    // ── Instant path — serve from the decoded cache, no await ──
+    // ── Instant path — serve from the decoded cache, no await. Covers the
+    //    known-missing case too (negative cache): status says so honestly. ──
     const cachedWind = this._store.peek(this._windUrl(hour));
-    const cachedSwell = this._peekSwellResolved(hour);
-    if (cachedWind && cachedSwell) {
-      this._applyGrids(cachedWind, cachedSwell);
-      setStatus(`f${fhr} loaded`);
+    const windKnownMissing = !cachedWind && this._store.isNegative(this._windUrl(hour));
+    const swellPeek = this._peekSwellResolved(hour);
+    if ((cachedWind || windKnownMissing) && swellPeek) {
+      this._applyGrids(cachedWind, swellPeek.grid);
+      this._setHourStatus(hour, cachedWind, swellPeek);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
       this._kickCoastlineLoad();
       return;
     }
 
     // ── Never leave the map stale while the network runs: render the
-    //    nearest already-decoded frame right now, swap when exact arrives ──
+    //    nearest already-decoded frame right now — honestly labelled as a
+    //    preview — then swap when the exact data arrives (latest-wins). ──
     setStatus(`Loading f${fhr}...`);
-    if (!cachedWind || !cachedSwell) {
+    {
       const nearHour = this._nearestCachedHour(hour);
       if (nearHour !== null) {
         this._applyGrids(
-          cachedWind || this._store.peek(this._windUrl(nearHour)),
-          cachedSwell || this._store.peek(this._swellUrl(nearHour)),
+          cachedWind || this._store.peek(this._windUrl(nearHour)) || this.windGrid,
+          (swellPeek && swellPeek.grid) || this._store.peek(this._swellUrl(nearHour)) || this.swellGrid,
         );
+        setStatus(`f${fhr} — previewing f${String(nearHour).padStart(3, '0')} while loading...`);
       }
     }
 
     try {
-      const [windGrid, swellGrid] = await Promise.all([
+      const [windGrid, swellRes] = await Promise.all([
         this._store.load(this._windUrl(hour), -1),
         this._loadSwellWithFallback(hour),
       ]);
 
       if (seq !== this._loadSeq) return;
 
-      this._applyGrids(windGrid, swellGrid);
-      setStatus(`f${fhr} loaded`);
+      this._applyGrids(windGrid, swellRes.grid);
+      this._setHourStatus(hour, windGrid, swellRes);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
       this._kickCoastlineLoad();
     } catch (err) {
@@ -247,38 +272,45 @@ class App {
 
   /**
    * Synchronous, fully-resolved swell lookup for the instant scrub path.
-   * Returns the exact hour's grid, or — ONLY when the exact hour is
-   * negative-cached (known missing) — the nearest cached ±3/±6h neighbor,
-   * mirroring _loadSwellWithFallback. Returns null when the answer can't be
-   * determined without the network (caller falls through to the async path).
+   * Returns `{ grid, actualHour }` for the exact hour, or — ONLY when the
+   * exact hour is negative-cached (known missing) — the nearest cached
+   * ±3/±6h neighbor, mirroring _loadSwellWithFallback (actualHour reveals
+   * the substitution so status can label it). Returns null when the answer
+   * can't be determined without the network (caller falls through to the
+   * async path).
    */
   _peekSwellResolved(hour) {
     const exact = this._store.peek(this._swellUrl(hour));
-    if (exact) return exact;
+    if (exact) return { grid: exact, actualHour: hour };
     if (!this._store.isNegative(this._swellUrl(hour))) return null;
     for (const offset of [3, -3, 6, -6]) {
       const nearby = hour + offset;
       if (nearby < 0 || nearby > 168) continue;
       const url = this._swellUrl(nearby);
       const fallback = this._store.peek(url);
-      if (fallback) return fallback;
+      if (fallback) return { grid: fallback, actualHour: nearby };
       if (!this._store.isNegative(url)) return null;
     }
-    return null;
+    // Exact hour and all neighbors are known-missing: honest "no data".
+    return { grid: null, actualHour: null };
   }
 
-  /** Try loading the exact swell hour; if missing, try the nearest ±3h step. */
+  /**
+   * Try loading the exact swell hour; if missing, try the nearest ±3h step.
+   * Returns { grid, actualHour } so callers can surface the substitution
+   * instead of silently labelling a neighboring hour's field as this hour.
+   */
   async _loadSwellWithFallback(hour) {
     const grid = await this._store.load(this._swellUrl(hour), -1);
-    if (grid) return grid;
+    if (grid) return { grid, actualHour: hour };
 
     for (const offset of [3, -3, 6, -6]) {
       const nearby = hour + offset;
       if (nearby < 0) continue;
       const fallback = await this._store.load(this._swellUrl(nearby), -1);
-      if (fallback) return fallback;
+      if (fallback) return { grid: fallback, actualHour: nearby };
     }
-    return null;
+    return { grid: null, actualHour: null };
   }
 
   _updateVisibility() {
