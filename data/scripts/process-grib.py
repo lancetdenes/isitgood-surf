@@ -233,6 +233,83 @@ def process_gfs_wave(grib_path, out_path):
     return True
 
 
+def process_gfs_swellpart(grib_path, out_path):
+    """Process GFS-Wave partitioned swell GRIB2 → binary (12 params).
+
+    Param order (matches the client's SWELLPART layout in grid.js):
+      [0-2]   partition 1: height, direction, period   (SWELL/SWDIR/SWPER, "1 in sequence")
+      [3-5]   partition 2: height, direction, period   ("2 in sequence")
+      [6-8]   partition 3: height, direction, period   ("3 in sequence")
+      [9-11]  wind sea:    height, direction, period   (WVHGT/WVDIR/WVPER, surface)
+
+    cfgrib exposes the partitions as shts/swdir/mpts with a 3-long
+    orderedSequenceData dimension, and windsea as shww/wvdir/mpww at surface.
+    NaN (land, or "this partition doesn't exist here") becomes 0 — same
+    land-as-zero convention the combined swell grid uses.
+    """
+    try:
+        part_ds = xr.open_dataset(grib_path, engine='cfgrib',
+                                  backend_kwargs={'filter_by_keys': {'typeOfLevel': 'orderedSequenceData'}})
+        sea_ds = xr.open_dataset(grib_path, engine='cfgrib',
+                                 backend_kwargs={'filter_by_keys': {'typeOfLevel': 'surface'}})
+    except Exception as e:
+        print(f"    Warning: Could not read {grib_path}: {e}")
+        return False
+
+    def find_var(ds, candidates):
+        for name in candidates:
+            if name in ds.data_vars:
+                return ds[name]
+        return None
+
+    p_h = find_var(part_ds, ('shts', 'swell'))    # partition heights (3, ny, nx)
+    p_d = find_var(part_ds, ('swdir',))           # partition directions
+    p_p = find_var(part_ds, ('mpts', 'swper'))    # partition periods
+    w_h = find_var(sea_ds, ('shww', 'wvhgt'))     # windsea height
+    w_d = find_var(sea_ds, ('wvdir',))            # windsea direction
+    w_p = find_var(sea_ds, ('mpww', 'wvper'))     # windsea period
+
+    if p_h is None or p_d is None or p_p is None or w_h is None:
+        print(f"    Warning: partition variables missing in {grib_path}")
+        print(f"    ordered-seq vars: {list(part_ds.data_vars)}, surface vars: {list(sea_ds.data_vars)}")
+        part_ds.close(); sea_ds.close()
+        return False
+
+    lats = part_ds.latitude.values
+    lons = part_ds.longitude.values
+
+    def plane(da, k=None):
+        data = da.values if k is None else da.values[k]
+        if data.ndim > 2:
+            data = data[0]
+        return np.nan_to_num(data, nan=0.0)
+
+    arrays = []
+    n_seq = p_h.values.shape[0] if p_h.values.ndim == 3 else 1
+    for k in range(3):
+        if k < n_seq:
+            arrays.extend([plane(p_h, k), plane(p_d, k), plane(p_p, k)])
+        else:
+            zero = np.zeros((len(lats), len(lons)), dtype=np.float32)
+            arrays.extend([zero, zero, zero])
+    zero = np.zeros((len(lats), len(lons)), dtype=np.float32)
+    arrays.extend([
+        plane(w_h),
+        plane(w_d) if w_d is not None else zero,
+        plane(w_p) if w_p is not None else zero,
+    ])
+
+    ny, nx = arrays[0].shape
+    la1 = float(lats[0])
+    lo1 = float(lons[0])
+    dy = abs(float(lats[1] - lats[0]))
+    dx = abs(float(lons[1] - lons[0]))
+
+    write_binary(out_path, nx, ny, lo1, la1, dx, dy, *arrays)
+    part_ds.close(); sea_ds.close()
+    return True
+
+
 def process_ecmwf_wind(grib_path, out_path):
     """Process ECMWF GRIB2 → binary (u10, v10)."""
     try:
@@ -473,6 +550,13 @@ def main():
                 process_gfs_wave(wave_grib, os.path.join(out_dir, f"swell_f{fhrp}.bin"))
             else:
                 print(f"    Skipping swell (no GRIB file)")
+
+            # Partitioned swell — separate file so the combined swell layer's
+            # payload doesn't grow. Only downloaded for 0-168h (see
+            # download-gfs.sh); silently absent for extended hours.
+            part_grib = os.path.join(grib_dir, f"gfs_swellpart_f{fhrp}.grib2")
+            if os.path.exists(part_grib):
+                process_gfs_swellpart(part_grib, os.path.join(out_dir, f"swellpart_f{fhrp}.bin"))
 
         elif model == 'ecmwf':
             atmo_grib = os.path.join(grib_dir, f"ecmwf_atmo_f{fhrp}.grib2")
