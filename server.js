@@ -27,6 +27,17 @@ app.use((req, res, next) => {
 // Serve static frontend
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Local-dev mock of the media backend (uploads, /api/me, media lists).
+// The real backend is Vercel functions + Neon + R2; until those are
+// provisioned, plain `node server.js` gets an in-memory stand-in so the
+// media feature is fully demoable. Gated off as soon as DATABASE_URL is
+// configured (or force it with MEDIA_MOCK=1 / disable with MEDIA_MOCK=0).
+const mediaMockEnabled = process.env.MEDIA_MOCK === '1' ||
+  (process.env.MEDIA_MOCK !== '0' && !process.env.DATABASE_URL);
+if (mediaMockEnabled) {
+  require('./server-media-mock')(app);
+}
+
 // Serve kdbush from node_modules for the hires coastline module.
 app.use('/vendor/kdbush', express.static(path.join(__dirname, 'node_modules/kdbush')));
 

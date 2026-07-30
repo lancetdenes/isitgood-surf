@@ -120,3 +120,75 @@ Outreach/ads (phase 2) · video transcoding/thumbnails (poster frame is captured
 1. Ship functions + schema behind the existing site (no flag needed — UI entry points appear only when `api/me` responds).
 2. Seed with your own uploads; watch admin list.
 3. Phase 2 (outreach) gets its own spec once v1 has real uploads.
+
+---
+
+## Addendum — Photo geolocation & timeline surfacing (fork/media-geo, 2026-07-29)
+
+Extends v1 so photos act as ground truth pinned to `(lat, lng, captured_at)`:
+auto-assigned to spots, surfaced on the map, and coupled to the forecast
+timeline. All additive; the v1 API surface is unchanged.
+
+### Spot assignment (no external geocoder)
+
+`public/js/spot-snap.js` — pure module shared verbatim by browser and server:
+
+- ≤ 2 km from a named spot (`public/data/named-spots.json`, 523 entries) →
+  the upload is labeled with the spot name ("Higgins Beach").
+- 2–10 km → "near <spot>"; exact coordinates are preserved.
+- \> 10 km → no association; coordinates only.
+
+`api/uploads/complete` now fills the previously-null `spot_name` column via
+this snapping (`api/_lib/spots.mjs`). The v1 non-goal "EXIF-based automatic
+spot matching" is hereby superseded: media is still keyed by lat/lng, but a
+display-level spot name is derived at write time.
+
+### Upload UX
+
+- **Geotagged photo:** EXIF GPS auto-assigns the location — the sheet shows
+  "📍 <spot> — from your photo". Adjusting the pin or time downgrades the
+  claimed tier to `manual` (unchanged trust model).
+- **No geotag (photos and videos):** upload is blocked until the user sets a
+  location in a full-screen picker (`public/js/geo-picker.js`): crosshair map,
+  live nearest-spot label, browser-geolocation button, named-spot search.
+  Locations are never silently defaulted anymore.
+- Images already ≤ 1600 px upload without canvas re-encode so their EXIF
+  survives the server-side "verified" re-check. (Known gap: larger photos are
+  still re-encoded, which strips EXIF and downgrades them to `manual` — an
+  EXIF-preserving transplant is future work.)
+- Upload entry points: panel strip button (v1) + a floating 📷 button
+  bottom-right whenever the media API responds.
+
+### Map + timeline surfacing
+
+- New query mode: `GET api/spots/media?bbox=w,s,e,n&sinceHours=168&limit=200`
+  → live media inside a viewport captured in the last `sinceHours` (default
+  168, max 720), newest-captured first. Same indexes as v1; the point+radius
+  mode is untouched. Both modes now also return `spotName`.
+- `public/js/media-map.js` renders photos as circular thumbnail markers
+  (glow ring, shrink to dots when zoomed out, hidden below z3.5), fetched on
+  layer enable + debounced `moveend`, cached per rounded bbox.
+- **Time coupling:** photos captured within ±6 h (`TIME_WINDOW_HOURS`) of the
+  timeline frame's absolute time (`runTime + hour`) render bright; others dim
+  to 30% and shrink. Scrubbing toggles one CSS class per marker — no refetch.
+- Lightbox shows spot name, stamp badge, "Wed 4:12 PM, 2h before this frame",
+  and a "jump timeline to this photo" button.
+- A "Photos" toggle joins the top-bar controls, defaulting ON when photos
+  exist in the initial view. Toggle, FAB, markers, and strip all hide when
+  `/api/me` doesn't respond (unprovisioned backend) — the v1 gate.
+
+### Local dev mock
+
+`server-media-mock.js` mounts an in-memory media backend under
+`node server.js` when `DATABASE_URL` is absent (or `MEDIA_MOCK=1`): signed-in
+`/api/me` (dev@local), 15 seeded fixture photos near real NE-US spots
+(`test/fixtures/media/`), and a presign → PUT → complete flow storing bytes in
+a tmp dir, reusing the real `uploadrules`/`stamp`/`spot-snap` modules. The
+prod Vercel path is untouched. `test/fixtures/media/gps-higgins.jpg` is a
+minimal JPEG with genuine GPS EXIF for exercising auto-assign end-to-end.
+
+### Bug fix
+
+`exifr.parse(file, { gps: true, pick: [...] })` (client + server in v1) never
+returned GPS — the global `pick` drops the GPS block before coordinate
+conversion. Both call sites now use `{ exif: ['DateTimeOriginal'], gps: true }`.

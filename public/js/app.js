@@ -25,6 +25,7 @@ setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
 import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
 import { initBuoys, buoyFeatureAt, closeBuoyPanel } from './buoys.js';
+import { initMediaMap, syncHour as syncMediaHour } from './media-map.js';
 
 class App {
   constructor() {
@@ -81,6 +82,10 @@ class App {
       initPanel();
       initPumping(this);
       initBuoys(this);
+      // Photos layer + upload FAB (self-hides when the media API is absent)
+      initMediaMap(this).catch(e => console.warn('Media map init failed:', e));
+      // (Coastline load stays deferred — see _kickCoastlineLoad — so it
+      // doesn't compete with the first heatmap paint for bandwidth.)
 
       this.map.on('click', (e) => this._onMapClick(e));
 
@@ -126,6 +131,8 @@ class App {
 
       // Update timeline ticks with actual day names
       if (this._onRunTimeReady) this._onRunTimeReady(this.runTime);
+      // Photo markers rendered before runTime resolved need a re-sync
+      syncMediaHour();
 
       await this._loadHour(this.hour);
       setStatus(`${info.model.toUpperCase()} — ${info.run}`);
@@ -531,6 +538,7 @@ class App {
     syncTimeline(hour, this.runTime);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
+    syncMediaHour();
   }
 
   /** Like setHour but returns a promise that resolves when grids are loaded */
@@ -540,6 +548,7 @@ class App {
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
+    syncMediaHour();
   }
 
   async _onMapClick(e) {
