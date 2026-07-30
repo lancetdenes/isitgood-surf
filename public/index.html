@@ -40,6 +40,14 @@
         <button class="ctrl-btn" data-layer="swell">Swell</button>
       </div>
 
+      <!-- Swell sub-layer: shown only while the swell layer is active and the
+           run has partitioned data (hidden for old runs without swellpart) -->
+      <div class="btn-group swell-mode-group" id="swell-mode-selector" style="display:none">
+        <button class="ctrl-btn active" data-swellmode="combined">Combined</button>
+        <button class="ctrl-btn" data-swellmode="ground">Groundswell</button>
+        <button class="ctrl-btn" data-swellmode="windsea">Windsea</button>
+      </div>
+
       <div class="divider"></div>
 
       <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where its pumping</button>

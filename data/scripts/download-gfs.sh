@@ -58,6 +58,15 @@ echo ""
 NOMADS_BASE="https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 WAVE_BASE="https://nomads.ncep.noaa.gov/cgi-bin/filter_gfswave.pl"
 
+# Partitioned swell fields (verified against the NOMADS filter CGI and the
+# GRIB .idx inventory, 2026-07-29):
+#   SWELL/SWDIR/SWPER live at levels "1 in sequence" / "2 in sequence" /
+#   "3 in sequence" → filter params lev_1_in_sequence etc.
+#   WVHGT/WVDIR/WVPER (wind sea) live at level "surface" → lev_surface.
+# The var_* filter restricts lev_surface to just the windsea fields, so the
+# subset returns exactly 12 GRIB messages (~7 MB per hour).
+SWELLPART_VARS="var_SWELL=on&var_SWDIR=on&var_SWPER=on&var_WVHGT=on&var_WVDIR=on&var_WVPER=on&lev_surface=on&lev_1_in_sequence=on&lev_2_in_sequence=on&lev_3_in_sequence=on"
+
 # Download to a temp file, then move into place — a failed transfer must not
 # leave a partial file that later runs treat as cached.
 fetch() {
@@ -93,14 +102,26 @@ for FHR in $HOURS; do
   WAVE_FILE="${GRIB_DIR}/gfs_wave_f${FHRP}.grib2"
   if [ ! -f "$WAVE_FILE" ]; then
     WAVE_URL="${WAVE_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fwave%2Fgridded&file=gfswave.t${CYCLE}z.global.0p25.f${FHRP}.grib2&var_HTSGW=on&var_DIRPW=on&var_PERPW=on"
-    fetch "$WAVE_URL" "$WAVE_FILE" && echo "wave ✓" || echo "wave ✗"
+    fetch "$WAVE_URL" "$WAVE_FILE" && echo -n "wave ✓  " || echo -n "wave ✗  "
   else
-    echo "wave (cached)"
+    echo -n "wave (cached)  "
+  fi
+
+  # --- Partitioned swell (3 swell trains + wind sea) ---
+  PART_FILE="${GRIB_DIR}/gfs_swellpart_f${FHRP}.grib2"
+  if [ ! -f "$PART_FILE" ]; then
+    PART_URL="${WAVE_BASE}?dir=%2Fgfs.${DATE}%2F${CYCLE}%2Fwave%2Fgridded&file=gfswave.t${CYCLE}z.global.0p25.f${FHRP}.grib2&${SWELLPART_VARS}"
+    fetch "$PART_URL" "$PART_FILE" && echo "part ✓" || echo "part ✗"
+  else
+    echo "part (cached)"
   fi
 done
 
 # ── Extended-range forecast: f174-f336 at 6-hourly steps (days 7-14) ──
 # (mirror of hours.js EXT range)
+# Partitioned swell is deliberately NOT downloaded for the extended range:
+# partition sub-layers and the panel's swell-trains section cover 0-168h
+# only; beyond that the UI falls back to the combined field.
 EXT_HOURS=$(seq 174 6 336)
 EXT_TOTAL=$(echo "$EXT_HOURS" | wc -w | tr -d ' ')
 EXT_COUNT=0

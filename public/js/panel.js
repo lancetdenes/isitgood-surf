@@ -11,6 +11,7 @@ import {
   ratingBgColor, compassDir, msToMph, mToFt
 } from './ratings.js';
 import { computeForecast } from './forecast.js';
+import { loadGrid, SWELLPART_BASES } from './grid.js';
 import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.js';
 import { renderCompass as renderCompassSvg } from './compass-render.js';
 import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
@@ -191,7 +192,13 @@ export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour 
       return entry;
     });
 
-    currentData = { lat, lon, coast: effectiveCoast, hours };
+    currentData = {
+      lat, lon, coast: effectiveCoast, hours,
+      // For the lazy swell-trains section: partition grids are fetched only
+      // after the panel opens (per selected hour), never on the default path.
+      dataPath, cachedLoad,
+      trainsByHour: new Map(),
+    };
     _selectClosestHour(currentHour);
     render();
   } catch (e) {
@@ -249,12 +256,17 @@ function render() {
     ${renderHeader(lat, lon)}
     ${renderOverall(or)}
     ${renderSelectedDetail(selHour, coast)}
+    <div class="rp-trains" id="rp-trains-slot" style="display:none"></div>
     ${renderHourly(selDay, coast)}
     ${renderDaily(days, coast)}
     <div style="font-size: 10px; color: rgba(148,163,184,0.5); margin-top: 12px; text-align: right; padding-right: 4px;">
       Coast: GSHHG &bull; Weather: NOAA GFS
     </div>
   `;
+
+  // Swell trains (partitioned swell) — async fill; hidden if the run has no
+  // swellpart files. Fetches lazily, only for the hour on display.
+  _fillTrains(selHour);
 
   // Spot media strip (no-ops until the media API is deployed). Cached per
   // location inside media.js, so hour-scrub re-renders don't refetch.
@@ -340,6 +352,11 @@ function updateSelection(dayChanged) {
   body.querySelectorAll('[data-day-idx]').forEach(el => {
     el.classList.toggle('rp-day-sel', parseInt(el.dataset.dayIdx) === selectedDayIdx);
   });
+
+  // ── Swell trains + LP badge ── patched in place like everything else
+  // (async fill for the newly selected hour; no innerHTML rebuild of the
+  // panel shell, so the mini-map still survives scrubbing).
+  _fillTrains(selHour);
 }
 
 function renderHeader(lat, lon) {
@@ -382,7 +399,7 @@ function renderDetailInfo(h) {
                   h.time.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
   const windLabel = h.windRating.desc || '';
   return `
-        <div class="rp-detail-time">${timeStr} <span>· selected</span></div>
+        <div class="rp-detail-time">${timeStr} <span>· selected</span><span class="rp-lp-slot"></span></div>
         <div class="rp-detail-row">
           <span class="rp-detail-label">Swell</span>
           <span class="rp-detail-val">${h.swellHeightFt.toFixed(1)}</span><span class="rp-detail-unit">ft</span>
@@ -419,6 +436,121 @@ function renderSelectedDetail(h, coast) {
       <div class="rp-detail-info">${renderDetailInfo(h)}</div>
     </div>
   `;
+}
+
+// ── Swell trains (partitioned swell) ──
+
+// Ignore trains below ~4 inches — quantization noise, not surf.
+const TRAIN_MIN_H_M = 0.1;
+// "Long period" threshold for the LP badge (seconds).
+const LP_PERIOD_S = 13;
+
+/**
+ * Fetch + interpolate the swell partitions for a forecast hour at the panel's
+ * point. Resolves to a sorted array of trains (energy H²T descending, up to
+ * 3 partitions + windsea) or null when the run has no swellpart file.
+ * Promise-cached per hour on currentData so scrubbing back is instant.
+ */
+function _getTrains(hour) {
+  const data = currentData;
+  if (!data || !data.dataPath) return Promise.resolve(null);
+  if (data.trainsByHour.has(hour)) return data.trainsByHour.get(hour);
+
+  const promise = (async () => {
+    const fhr = String(hour).padStart(3, '0');
+    const url = `${data.dataPath}/swellpart_f${fhr}.bin`;
+    const grid = data.cachedLoad
+      ? await data.cachedLoad(url)
+      : await loadGrid(url).catch(() => null);
+    if (!grid || grid.arrays.length < 12) return null;
+
+    const trains = [];
+    for (const base of SWELLPART_BASES.partitions) {
+      const sw = grid.interpolateSwellCoastal(data.lon, data.lat, 0.05, base);
+      if (sw && sw.height >= TRAIN_MIN_H_M) trains.push({ kind: 'swell', ...sw });
+    }
+    const ws = grid.interpolateSwellCoastal(data.lon, data.lat, 0.05, SWELLPART_BASES.windsea);
+    if (ws && ws.height >= TRAIN_MIN_H_M) trains.push({ kind: 'windsea', ...ws });
+
+    trains.sort((a, b) => b.height * b.height * b.period - a.height * a.height * a.period);
+    return trains;
+  })();
+
+  data.trainsByHour.set(hour, promise);
+  return promise;
+}
+
+/** Async-populate the trains section + LP badge for the selected hour. */
+async function _fillTrains(selHour) {
+  const data = currentData;
+  const trains = await _getTrains(selHour.hour).catch(() => null);
+
+  // Stale guard: panel closed, moved to another spot, or hour changed while
+  // the fetch was in flight.
+  if (currentData !== data) return;
+  const slot = panelEl.querySelector('#rp-trains-slot');
+  if (!slot) return;
+  const nowSel = _currentSelHour();
+  if (!nowSel || nowSel.hour !== selHour.hour) return;
+
+  if (!trains || trains.length === 0) {
+    // Graceful degrade — and, because hour changes patch in place rather
+    // than rebuilding innerHTML, explicitly clear anything a previous hour
+    // left behind (stale trains rows / LP chip).
+    slot.style.display = 'none';
+    slot.innerHTML = '';
+    const staleLp = panelEl.querySelector('.rp-lp-slot');
+    if (staleLp) staleLp.innerHTML = '';
+    return;
+  }
+
+  const maxEnergy = trains.reduce((m, t) => Math.max(m, t.height * t.height * t.period), 0);
+  const rows = trains.map(t => {
+    const hFt = mToFt(t.height);
+    const isLP = t.kind === 'swell' && t.period >= LP_PERIOD_S;
+    const kindLabel = t.kind === 'windsea' ? 'Windsea' : (isLP ? 'Ground' : 'Swell');
+    const energyPct = maxEnergy > 0
+      ? Math.max(4, (t.height * t.height * t.period / maxEnergy) * 100) : 0;
+    // Arrow points where the swell travels TO (Surfline convention);
+    // t.direction is meteorological FROM.
+    const rot = Math.round((t.direction + 180) % 360);
+    return `
+      <div class="rp-train ${t.kind === 'windsea' ? 'rp-train-windsea' : ''}">
+        <span class="rp-train-arrow" style="transform:rotate(${rot}deg)">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+            <path d="M12 2 L17 12 L12 9.5 L7 12 Z"/>
+          </svg>
+        </span>
+        <span class="rp-train-ht">${hFt.toFixed(1)}<span class="rp-train-u">ft</span></span>
+        <span class="rp-train-per">${t.period.toFixed(0)}<span class="rp-train-u">s</span></span>
+        <span class="rp-train-dir">${compassDir(t.direction)} ${Math.round(t.direction)}°</span>
+        <span class="rp-train-kind ${isLP ? 'rp-train-kind-lp' : ''}">${kindLabel}</span>
+        <span class="rp-train-bar"><span style="width:${energyPct.toFixed(0)}%"></span></span>
+      </div>
+    `;
+  }).join('');
+
+  slot.innerHTML = `<div class="rp-sec-title">Swell trains</div><div class="rp-train-rows">${rows}</div>`;
+  slot.style.display = '';
+
+  // LP badge — additive: ratings stay computed from the combined field, but
+  // hours with a real long-period partition get flagged in the detail header.
+  const lp = trains.find(t => t.kind === 'swell' && t.period >= LP_PERIOD_S);
+  const lpSlot = panelEl.querySelector('.rp-lp-slot');
+  if (lpSlot) {
+    lpSlot.innerHTML = lp
+      ? ` <span class="rp-lp-chip" title="Long-period groundswell in the mix">LP ${lp.period.toFixed(0)}s</span>`
+      : '';
+  }
+}
+
+/** The hour entry currently selected in the panel (or null). */
+function _currentSelHour() {
+  if (!currentData) return null;
+  const days = _groupByDay(currentData.hours);
+  const selDay = days[selectedDayIdx] || days[0];
+  if (!selDay) return null;
+  return selDay.hours[selectedHourIdx] || selDay.hours[0] || null;
 }
 
 function renderHourly(day, coast) {

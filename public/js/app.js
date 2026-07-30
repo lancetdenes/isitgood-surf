@@ -14,8 +14,9 @@ import { WindRenderer } from './wind.js';
 import { SwellRenderer } from './swell.js';
 import { HeatmapRenderer } from './heatmap.js';
 import { GridStore } from './grid-store.js';
-import { initUI, updateLegendVisibility, setStatus, syncTimeline } from './ui.js';
-import { FORECAST_HOURS, hourToIndex } from './hours.js';
+import { deriveGroundswellGrid, deriveWindseaGrid } from './grid.js';
+import { initUI, updateLegendVisibility, updateSwellModeUI, setStatus, syncTimeline } from './ui.js';
+import { FORECAST_HOURS, hourToIndex, BASE_END } from './hours.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
 import { setKDBush } from './coastline-hires.js';
@@ -34,6 +35,15 @@ class App {
     this.marker = null;
     this.windGrid = null;
     this.swellGrid = null;
+    // Partitioned swell (swellpart_fNNN.bin) — loaded lazily, only when a
+    // partition sub-layer is selected, so the default path stays fast.
+    // swellMode: 'combined' | 'ground' | 'windsea'
+    this.swellMode = 'combined';
+    this.swellPartGrid = null;
+    // null = unknown (not probed yet), true/false once checked. Old runs
+    // without swellpart files degrade to combined-only with the sub-toggle
+    // hidden.
+    this.partAvailable = null;
     this.map = null;
     this.wind = null;
     this.swell = null;
@@ -80,6 +90,10 @@ class App {
     setStatus('Finding latest data...');
     invalidatePumpingCache();
     this._store.reset(); // drop queued prefetches from a previous run/model
+
+    // New run/model: partition availability must be re-probed.
+    this.partAvailable = null;
+    this.swellPartGrid = null;
 
     const config = window.SURF_CONFIG || {};
     const manifestUrl = config.MANIFEST_URL || `/api/latest/${this.model}`;
@@ -183,12 +197,26 @@ class App {
     // Re-center the background prefetcher on the new hour.
     this._schedulePrefetch(hour);
 
+    // Partition grids are only fetched when a partition sub-layer is active —
+    // the combined default never pays for the (4×-larger) swellpart file.
+    // Partition files only exist for the 3-hourly core range (0–168h); at
+    // extended hours the view falls back to the combined field.
+    const partModeActive = this.swellMode !== 'combined' &&
+      (this.layer === 'swell' || this.layer === 'both');
+    const needPart = partModeActive && hour <= BASE_END;
+    if (partModeActive && hour > BASE_END) this.swellPartGrid = null;
+
     // ── Instant path — serve from the decoded cache, no await. Covers the
     //    known-missing case too (negative cache): status says so honestly. ──
     const cachedWind = this._store.peek(this._windUrl(hour));
     const windKnownMissing = !cachedWind && this._store.isNegative(this._windUrl(hour));
     const swellPeek = this._peekSwellResolved(hour);
-    if ((cachedWind || windKnownMissing) && swellPeek) {
+    const partPeek = needPart ? this._peekPartResolved(hour) : undefined;
+    if ((cachedWind || windKnownMissing) && swellPeek && (!needPart || partPeek !== null)) {
+      if (needPart) {
+        this.swellPartGrid = partPeek || null;
+        if (!partPeek) this._setPartUnavailable();
+      }
       this._applyGrids(cachedWind, swellPeek.grid);
       this._setHourStatus(hour, cachedWind, swellPeek);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
@@ -212,13 +240,18 @@ class App {
     }
 
     try {
-      const [windGrid, swellRes] = await Promise.all([
+      const [windGrid, swellRes, partGrid] = await Promise.all([
         this._store.load(this._windUrl(hour), -1),
         this._loadSwellWithFallback(hour),
+        needPart ? this._loadPartWithFallback(hour) : Promise.resolve(undefined),
       ]);
 
       if (seq !== this._loadSeq) return;
 
+      if (needPart) {
+        this.swellPartGrid = partGrid || null;
+        if (!partGrid) this._setPartUnavailable();
+      }
       this._applyGrids(windGrid, swellRes.grid);
       this._setHourStatus(hour, windGrid, swellRes);
       (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
@@ -251,9 +284,17 @@ class App {
    * pending URLs are a no-op apart from a possible priority bump, so
    * calling this on every scrub tick is cheap and keeps the pool always
    * working on the most useful frames.
+   *
+   * Partitioned-swell files are prefetched ONLY while a partition sub-mode
+   * is active, and only a ±4-step window around the cursor: they are ~4×
+   * the size of a combined grid and full-timeline prefetch would both blow
+   * the raw LRU tier and pull ~440 MB/run over the wire. They exist only
+   * for the 0–168h core range.
    */
   _schedulePrefetch(centerHour) {
     if (!this.dataPath) return;
+    const partActive = this.swellMode !== 'combined' && this.partAvailable !== false &&
+      (this.layer === 'swell' || this.layer === 'both');
     const ci = hourToIndex(centerHour);
     for (let i = 0; i < FORECAST_HOURS.length; i++) {
       const h = FORECAST_HOURS[i];
@@ -261,6 +302,9 @@ class App {
       const priority = d >= 0 ? d : -d + 1;
       this._store.load(this._windUrl(h), priority);
       this._store.load(this._swellUrl(h), priority);
+      if (partActive && h <= BASE_END && Math.abs(d) <= 4) {
+        this._store.load(this._partUrl(h), priority);
+      }
     }
   }
 
@@ -334,14 +378,103 @@ class App {
     return { grid: null, actualHour: null };
   }
 
+  _partUrl(hour) {
+    return `${this.dataPath}/swellpart_f${String(hour).padStart(3, '0')}.bin`;
+  }
+
+  /**
+   * Neighbor timeline steps usable for partitioned-swell fallback: same
+   * shared-hours walk as _swellNeighborHours, clamped to the 0–168h core
+   * range (extended hours have no swellpart files).
+   */
+  _partNeighborHours(hour) {
+    return this._swellNeighborHours(hour).filter(h => h <= BASE_END);
+  }
+
+  /**
+   * Synchronous partition-grid lookup for the instant scrub path, through
+   * the same GridStore tiers. Returns the exact hour's grid, a neighboring
+   * step's grid when the exact hour is negative-cached, null when the
+   * network is needed (caller falls to the async path), or undefined when
+   * the exact hour and all neighbors are known-missing.
+   */
+  _peekPartResolved(hour) {
+    const exact = this._store.peek(this._partUrl(hour));
+    if (exact) return exact;
+    if (!this._store.isNegative(this._partUrl(hour))) return null;
+    for (const nearby of this._partNeighborHours(hour)) {
+      const url = this._partUrl(nearby);
+      const fallback = this._store.peek(url);
+      if (fallback) return fallback;
+      if (!this._store.isNegative(url)) return null;
+    }
+    return undefined; // known-missing everywhere nearby
+  }
+
+  /**
+   * Timeline-step fallback for the partitioned swell file, loaded through
+   * GridStore (worker decode + LRU + negative cache) like every other grid.
+   */
+  async _loadPartWithFallback(hour) {
+    if (hour > BASE_END) return null; // partitions only exist 0–168h
+    const grid = await this._store.load(this._partUrl(hour), -1);
+    if (grid) {
+      this.partAvailable = true;
+      return grid;
+    }
+    for (const nearby of this._partNeighborHours(hour)) {
+      const fallback = await this._store.load(this._partUrl(nearby), -1);
+      if (fallback) {
+        this.partAvailable = true;
+        return fallback;
+      }
+    }
+    return null;
+  }
+
+  /** Old runs have no swellpart files: hide the sub-toggle, go combined. */
+  _setPartUnavailable() {
+    this.partAvailable = false;
+    this.swellMode = 'combined';
+    updateSwellModeUI(this);
+  }
+
+  /**
+   * Cheap availability probe (HEAD, no body) so the sub-toggle only shows
+   * when the run actually has partition files. Runs once per data path.
+   */
+  async _probePartAvailability() {
+    if (this.partAvailable !== null || !this.dataPath) return;
+    try {
+      const resp = await fetch(`${this.dataPath}/swellpart_f000.bin`, { method: 'HEAD' });
+      // Only settle on false for a definitive 4xx; transient errors keep null
+      // so a later layer switch re-probes.
+      if (resp.ok) this.partAvailable = true;
+      else if (resp.status >= 400 && resp.status < 500) this.partAvailable = false;
+    } catch (e) { /* network hiccup: stay unknown */ }
+    updateSwellModeUI(this);
+  }
+
+  /** The grid driving the swell heatmap + particles for the active sub-mode. */
+  _activeSwellGrid() {
+    if (this.swellMode !== 'combined' && this.swellPartGrid) {
+      return this.swellMode === 'ground'
+        ? deriveGroundswellGrid(this.swellPartGrid)
+        : deriveWindseaGrid(this.swellPartGrid);
+    }
+    return this.swellGrid;
+  }
+
   _updateVisibility() {
     const showWind = this.layer === 'wind' || this.layer === 'both';
     const showSwell = this.layer === 'swell' || this.layer === 'both';
 
+    const swellField = this._activeSwellGrid();
+
     // Heatmap background: wind speed or swell height
     if (showSwell && !showWind) {
       this.heatmap.setMode('swell');
-      this.heatmap.setGrid(this.swellGrid);
+      this.heatmap.setGrid(swellField);
     } else {
       this.heatmap.setMode('wind');
       this.heatmap.setGrid(this.windGrid);
@@ -353,12 +486,15 @@ class App {
     if (showWind && this.windGrid) this.wind.start();
     else this.wind.stop();
 
-    // Swell particles
+    // Swell particles — dash length encodes period on partition layers
+    if (swellField) this.swell.setGrid(swellField);
+    this.swell.periodDashes = this.swellMode !== 'combined' && !!this.swellPartGrid;
     this.swell.setVisible(showSwell);
-    if (showSwell && this.swellGrid) this.swell.start();
+    if (showSwell && swellField) this.swell.start();
     else this.swell.stop();
 
     updateLegendVisibility(this.layer);
+    updateSwellModeUI(this);
   }
 
   setModel(model) {
@@ -370,7 +506,21 @@ class App {
 
   setLayer(layer) {
     this.layer = layer;
+    if (layer === 'swell' || layer === 'both') this._probePartAvailability();
     this._updateVisibility();
+  }
+
+  /** Swell sub-layer: 'combined' | 'ground' | 'windsea'. */
+  setSwellMode(mode) {
+    if (mode === this.swellMode) return;
+    this.swellMode = mode;
+    if (mode !== 'combined') {
+      // Fetch (or cache-hit) the partition grid for the current hour, then
+      // _updateVisibility inside _loadHour swaps the field.
+      this._loadHour(this.hour);
+    } else {
+      this._updateVisibility();
+    }
   }
 
   setHour(hour) {
@@ -421,7 +571,8 @@ class App {
 }
 
 const app = new App();
-// Dev/measurement hook — used by verify/measure.js (Playwright harness).
+// Dev/measurement hook — used by verify/measure.js (Playwright harness) and
+// verification tooling to reach the map/app state; not a production path.
 window.__app = app;
 app.init().catch(err => {
   console.error('App init failed:', err);

@@ -31,6 +31,13 @@ export class SwellRenderer {
     this.fadeOpacity = 0.85;       // faster fade
     this.lineWidth = 1.4;
     this.color = 'rgba(180, 220, 255, 0.6)';
+    // Period encoding for partition layers (groundswell/windsea): scale each
+    // crest dash by the local wave period. A 10 s reference maps to the
+    // default dash; 18 s groundswell crests draw ~1.8× longer, 6 s windsea
+    // chop ~0.6× shorter — wavelength grows with period, so long lazy lines
+    // vs short choppy ticks reads instantly. Off for the combined layer so
+    // its look matches prod exactly.
+    this.periodDashes = false;
 
     this._resizeBound = () => this._resize();
     window.addEventListener('resize', this._resizeBound);
@@ -229,10 +236,16 @@ export class SwellRenderer {
       proj.unproject(cx, cy, p); // writes p.lng / p.lat in place
       p.age++;
 
-      // Draw a dash perpendicular to the travel direction (like a wave crest)
+      // Draw a dash perpendicular to the travel direction (like a wave crest).
+      // With periodDashes on, dash length encodes the local wave period
+      // (clamped 0.5×–2× around a 10 s reference).
+      let hd = halfDash;
+      if (this.periodDashes && sw.period > 0) {
+        hd = halfDash * Math.min(2.0, Math.max(0.5, sw.period / 10));
+      }
       ctx.beginPath();
-      ctx.moveTo(cx - dy * halfDash, cy + dx * halfDash);
-      ctx.lineTo(cx + dy * halfDash, cy - dx * halfDash);
+      ctx.moveTo(cx - dy * hd, cy + dx * hd);
+      ctx.lineTo(cx + dy * hd, cy - dx * hd);
       ctx.stroke();
 
       // Reset if expired or off-screen

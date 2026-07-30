@@ -133,6 +133,13 @@ body {
   background: var(--accent-dim);
 }
 
+/* Swell sub-layer toggle — slightly smaller than the main layer buttons so
+   it reads as subordinate to the Swell tab it refines */
+.swell-mode-group .ctrl-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .status {
   margin-left: auto;
   font-size: 12px;
@@ -479,6 +486,53 @@ body {
 .rp-sec-title {
   font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
   color: var(--text-muted); font-weight: 600; margin-bottom: 10px;
+}
+
+/* Swell trains (partitioned swell readout, Surfline-style) */
+.rp-trains {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+.rp-train {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 0;
+}
+.rp-train-arrow {
+  align-self: center; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  color: #7dd3fc;
+}
+.rp-train-windsea .rp-train-arrow { color: #94a3b8; }
+.rp-train-ht { font-size: 15px; font-weight: 700; min-width: 44px; }
+.rp-train-per { font-size: 13px; font-weight: 600; min-width: 30px; }
+.rp-train-u { font-size: 10px; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
+.rp-train-dir { font-size: 11px; color: var(--text-muted); min-width: 62px; }
+.rp-train-kind {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); min-width: 48px;
+}
+.rp-train-kind-lp { color: #a78bfa; font-weight: 700; }
+.rp-train-bar {
+  flex: 1; align-self: center; height: 3px; border-radius: 2px;
+  background: rgba(148,163,184,0.12); overflow: hidden;
+}
+.rp-train-bar span {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(to right, #38bdf8, #818cf8);
+}
+.rp-train-windsea .rp-train-bar span {
+  background: rgba(148,163,184,0.55);
+}
+
+/* Long-period badge in the selected-detail header — additive flag only,
+   ratings still score the combined field */
+.rp-lp-chip {
+  display: inline-block; margin-left: 6px; padding: 1px 6px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+  color: #c4b5fd; background: rgba(139,92,246,0.16);
+  border: 1px solid rgba(139,92,246,0.35); border-radius: 999px;
+  vertical-align: 1px;
 }
 
 /* Hourly scroll */

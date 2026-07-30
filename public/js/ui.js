@@ -12,6 +12,7 @@ export function initUI(app) {
   initSiteName();
   initModelSelector(app);
   initLayerSelector(app);
+  initSwellModeSelector(app);
   initTimeline(app);
   initLegends();
 }
@@ -51,6 +52,44 @@ function initLayerSelector(app) {
       app.setLayer(btn.dataset.layer);
     });
   });
+}
+
+// ── Swell sub-layer selector (Combined | Groundswell | Windsea) ──
+function initSwellModeSelector(app) {
+  const btns = document.querySelectorAll('#swell-mode-selector .ctrl-btn');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      app.setSwellMode(btn.dataset.swellmode);
+    });
+  });
+}
+
+const SWELL_LEGEND_TITLES = {
+  combined: 'Swell (m)',
+  ground: 'Groundswell (m)',
+  windsea: 'Windsea (m)',
+};
+
+/**
+ * Sync the sub-toggle with app state: visible only while the swell layer is
+ * active AND the run has partition data (partAvailable !== false). Keeps the
+ * active button and the legend title in step with app.swellMode — needed when
+ * the app force-reverts to combined after a swellpart 404.
+ */
+export function updateSwellModeUI(app) {
+  const sel = document.getElementById('swell-mode-selector');
+  if (!sel) return;
+  const swellActive = app.layer === 'swell' || app.layer === 'both';
+  sel.style.display = (swellActive && app.partAvailable !== false) ? '' : 'none';
+
+  sel.querySelectorAll('.ctrl-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.swellmode === app.swellMode);
+  });
+
+  const legendTitle = document.querySelector('#swell-legend .legend-title');
+  if (legendTitle) legendTitle.textContent = SWELL_LEGEND_TITLES[app.swellMode] || SWELL_LEGEND_TITLES.combined;
 }
 
 // ── Timeline ──

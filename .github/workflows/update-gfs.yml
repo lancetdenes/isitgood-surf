@@ -50,12 +50,16 @@ jobs:
           FILE_COUNT=$(ls data/gfs/$RUN_ID/*.bin | wc -l)
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "Run: $RUN_ID ($FILE_COUNT .bin files)"
-          # Threshold covers: wind_*.bin + swell_*.bin across all hours + points.bin.
-          # A full run is 85 wind + 85 swell + points.bin = 171 files
-          # (hours 0-168 @3h + 174-336 @6h; see public/js/hours.js).
-          # Below 160 means GRIB downloads were substantially incomplete —
-          # including a silently-missing extended range.
-          if [ "$FILE_COUNT" -lt 160 ]; then
+          # Guardrail arithmetic — a complete run is 228 .bin files:
+          #   85 wind_*.bin  (hours 0-168 @3h + 174-336 @6h; public/js/hours.js)
+          # + 85 swell_*.bin (same 85 hours)
+          # + 57 swellpart_*.bin (partitioned swell, core range 0-168h @3h only)
+          # +  1 points.bin  (the 85-hour spot cube)
+          # Threshold 210 tolerates a handful of transient per-hour failures
+          # but fails CI if a whole category goes silently missing:
+          #   no swellpart files      -> 171 (< 210, fails)
+          #   no extended range (56)  -> 172 (< 210, fails)
+          if [ "$FILE_COUNT" -lt 210 ]; then
             echo "::error::Only $FILE_COUNT files processed; aborting."
             exit 1
           fi
@@ -125,12 +129,12 @@ jobs:
           # points.bin is excluded: range requests need the stored bytes to
           # match the offsets the client computed, which gzip at rest breaks.
           cd "data/gfs/${RUN_ID}"
-          for f in wind_*.bin swell_*.bin; do
+          for f in wind_*.bin swell_*.bin swellpart_*.bin; do
             [ -f "$f" ] || continue
             gzip -9 -c "$f" > "${f}.tmp.gz"
             mv "${f}.tmp.gz" "$f"
           done
-          echo "Gzipped $(ls wind_*.bin swell_*.bin | wc -l) per-hour grid files."
+          echo "Gzipped $(ls wind_*.bin swell_*.bin swellpart_*.bin | wc -l) per-hour grid files."
 
       - name: Upload per-hour grids to R2 (gzip Content-Encoding)
         if: ${{ env.R2_ACCOUNT_ID != '' }}
@@ -144,7 +148,7 @@ jobs:
           ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
           # Per-hour grids only (excludes points.bin) — tagged gzip-encoded.
           aws s3 cp --recursive --endpoint-url "$ENDPOINT" \
-            --exclude "*" --include "wind_*.bin" --include "swell_*.bin" \
+            --exclude "*" --include "wind_*.bin" --include "swell_*.bin" --include "swellpart_*.bin" \
             --cache-control "public, max-age=31536000, immutable" \
             --content-type "application/octet-stream" \
             --content-encoding "gzip" \
