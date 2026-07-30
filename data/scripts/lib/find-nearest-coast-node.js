@@ -11,7 +11,7 @@
  * Used by build-coast-points-hires.js and downstream tooling that needs to
  * compute coast bearings against the GSHHG hires binary in Node.
  */
-import { computeAdaptiveBearing } from '../../../public/js/coastline-shared.js';
+import { computeAdaptiveBearing, validateSeaward, unwrapSegmentLons, normLon180 } from '../../../public/js/coastline-shared.js';
 
 const SEARCH_RADIUS_DEG = 0.5;
 
@@ -54,7 +54,10 @@ export function buildIndex(KDBush, data) {
     for (let s = 0; s < len - 1; s++) {
       const [lA, laA] = data.vertex(f, s);
       const [lB, laB] = data.vertex(f, s + 1);
-      idx.add((lA + lB) / 2, (laA + laB) / 2);
+      // Unwrap Greenwich-crossing segments (stored 359.93 → 0.00) so the
+      // midpoint stays on the real coast instead of landing at lon ≈ 180.
+      const [uA, uB] = unwrapSegmentLons(lA, lB);
+      idx.add((uA + uB) / 2, (laA + laB) / 2);
       segKey[k * 2] = f;
       segKey[k * 2 + 1] = s;
       k++;
@@ -95,8 +98,14 @@ export function findNearestCoastNode(data, idx, lat, lon) {
     const f = idx.segKey[ci * 2], s = idx.segKey[ci * 2 + 1];
     const [lonA, latA] = data.vertex(f, s);
     const [lonB, latB] = data.vertex(f, s + 1);
-    const proj = projectOntoSegment(lon360, lat, lonA, latA, lonB, latB);
-    const projLon = to180(proj.lon);
+    // Unwrap the segment, then shift into the query's longitude frame so the
+    // planar projection never spans the 0/360 seam.
+    let [uA, uB] = unwrapSegmentLons(lonA, lonB);
+    const midLon = (uA + uB) / 2;
+    if (midLon - lon360 > 180) { uA -= 360; uB -= 360; }
+    else if (midLon - lon360 < -180) { uA += 360; uB += 360; }
+    const proj = projectOntoSegment(lon360, lat, uA, latA, uB, latB);
+    const projLon = normLon180(proj.lon);
     const dKm = haversineKm(lat, lon, proj.lat, projLon);
     cands.push({ d: dKm * 1000, f, s, pt: [proj.lat, projLon] });
   }
