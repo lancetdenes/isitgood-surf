@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 
 const compression = require('compression');
+const { FORECAST_HOURS } = require('./data/scripts/lib/forecast-hours');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -206,10 +207,10 @@ function interpolateAngle(grid, paramIdx, lon, lat) {
 // Cache parsed grids in memory (key = file path)
 const gridCache = new Map();
 // Grids are stored as Float32Array after parse (~8 MB wind, ~12.5 MB swell per
-// hour). 150 entries covers a full run + headroom for a partial incoming run
-// during atomic swap. Values < 114 thrash the cache on /api/forecast because
-// one request touches every file in the run.
-const CACHE_MAX = 150;
+// hour). 200 entries covers a full 85-hour run (170 grid files) + headroom
+// for a partial incoming run during atomic swap. Values < 170 thrash the
+// cache on /api/forecast because one request touches every file in the run.
+const CACHE_MAX = 200;
 const fsPromises = require('fs').promises;
 
 async function loadGridAsync(filePath) {
@@ -269,8 +270,9 @@ app.get('/api/forecast', async (req, res) => {
   const hours = [];
   let lastSwellValues = null; // Fallback for missing hours
 
-  // Process sequentially to avoid memory spikes (swell files are ~30MB each)
-  for (let h = 0; h <= 168; h += 3) {
+  // Process sequentially to avoid memory spikes (swell files are ~30MB each).
+  // Full horizon: 0-168 @3h then 174-336 @6h (see data/scripts/lib/forecast-hours.js).
+  for (const h of FORECAST_HOURS) {
     const fhr = String(h).padStart(3, '0');
     const entry = {
       hour: h,
@@ -448,7 +450,7 @@ function warmupCache() {
     console.log(`  [cache] Warming up ${model}/${runs[0]}...`);
 
     const files = [];
-    for (let h = 0; h <= 168; h += 3) {
+    for (const h of FORECAST_HOURS) {
       const fhr = String(h).padStart(3, '0');
       files.push(path.join(runDir, `wind_f${fhr}.bin`));
       files.push(path.join(runDir, `swell_f${fhr}.bin`));
