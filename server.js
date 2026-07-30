@@ -43,6 +43,12 @@ app.use('/data', express.static(DATA_DIR, {
 // Guarantees clients never see a partially-written run.
 const isPublishedRun = (d) => !d.endsWith('.tmp') && !d.endsWith('.old');
 
+// Directory test that tolerates a race: receive-run.sh's `rm -rf` during an
+// atomic swap can delete an entry between readdir and statSync, which would
+// otherwise throw and 500 the route (and on /api/latest send the client to
+// synthetic demo data). Treat a vanished entry as "not a directory".
+const isDirSafe = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
+
 // Input validation for path components. Express URL-decodes `%2F` inside a
 // single route parameter, so `:model` / `:run` would otherwise accept
 // `../../etc`-style traversal (verified: readdir of any readable directory).
@@ -70,7 +76,7 @@ app.get('/api/runs/:model', (req, res) => {
   }
 
   const runs = fs.readdirSync(modelDir)
-    .filter(d => fs.statSync(path.join(modelDir, d)).isDirectory())
+    .filter(d => isDirSafe(path.join(modelDir, d)))
     .filter(isPublishedRun)
     .sort()
     .reverse();
@@ -117,7 +123,7 @@ app.get('/api/latest/:model', (req, res) => {
   }
 
   const runs = fs.readdirSync(modelDir)
-    .filter(d => fs.statSync(path.join(modelDir, d)).isDirectory())
+    .filter(d => isDirSafe(path.join(modelDir, d)))
     .filter(isPublishedRun)
     .sort()
     .reverse();
