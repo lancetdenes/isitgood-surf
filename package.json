@@ -36,6 +36,7 @@
     "@turf/boolean-point-in-polygon": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "kdbush": "^4.0.2",
+    "maplibre-gl": "^4.7.1",
     "playwright-core": "^1.62.0"
   }
 }
