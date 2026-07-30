@@ -40,6 +40,10 @@
         <button class="ctrl-btn" data-layer="swell">Swell</button>
       </div>
 
+      <!-- Photos overlay toggle — revealed by media-map.js when the media
+           API is provisioned; independent of the exclusive wind/swell pair. -->
+      <button class="ctrl-btn" id="photos-toggle" hidden>📷 Photos</button>
+
       <div class="divider"></div>
 
       <button class="ctrl-btn" id="pumping-btn" title="Global top 100">where its pumping</button>
@@ -123,12 +127,19 @@
         <label>Captured <input type="datetime-local" id="upload-time"></label>
         <div class="upload-stamp-tag" id="upload-stamp-tag"></div>
       </div>
-      <div class="upload-minimap" id="upload-minimap"></div>
+      <div class="upload-location" id="upload-location">
+        <span class="upload-location-label" id="upload-location-label"></span>
+        <button class="ctrl-btn" id="upload-location-btn">set location</button>
+      </div>
       <input type="text" id="upload-caption" maxlength="140" placeholder="Caption (optional)">
       <button class="ctrl-btn" id="upload-submit" disabled>Upload</button>
       <div class="upload-status" id="upload-status"></div>
     </div>
   </div>
+
+  <!-- Floating upload button — revealed by media-map.js when the media API
+       is provisioned -->
+  <button id="media-fab" title="Add a surf photo" hidden>📷</button>
 
   <!-- Sign-in modal -->
   <div class="signin-modal" id="signin-modal" hidden>

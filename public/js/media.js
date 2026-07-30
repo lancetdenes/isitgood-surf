@@ -5,8 +5,17 @@
  * probes /api/me once and every entry point no-ops until it responds like a
  * real endpoint (200 or 401). This keeps the static site clean when the
  * serverless functions/env aren't provisioned yet.
+ *
+ * Location handling (photo-geolocation fork):
+ *  - geotagged photo → EXIF GPS snapped to the named-spots list and labeled
+ *    "📍 <spot> — from your photo" (auto-assign).
+ *  - no geotag → the upload CANNOT proceed until the user sets a location in
+ *    the full-screen picker (geo-picker.js). No more silent defaults.
  */
 import exifr from '/vendor/exifr/full.esm.js';
+import { snapToSpot } from './spot-snap.js';
+import { loadNamedSpots } from './named-spots.js';
+import { pickLocation } from './geo-picker.js';
 
 // ── API availability + session ──
 
@@ -59,9 +68,17 @@ export function ensureSignedIn() {
 
 // ── Upload sheet ──
 
-/** Downscale an image file to <=1600px JPEG. Returns {blob, contentType}. */
+/**
+ * Downscale an image file to <=1600px JPEG. Returns {blob, contentType}.
+ * Files already within the limit upload as-is: a canvas re-encode strips
+ * EXIF, which would make the server-side "verified" re-check impossible.
+ */
 async function downscalePhoto(file) {
   const bitmap = await createImageBitmap(file);
+  if (Math.max(bitmap.width, bitmap.height) <= 1600 &&
+      (file.type === 'image/jpeg' || file.type === 'image/png')) {
+    return { blob: file, contentType: file.type };
+  }
   const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
   const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
   const canvas = document.createElement('canvas');
@@ -71,10 +88,20 @@ async function downscalePhoto(file) {
   return { blob, contentType: 'image/jpeg' };
 }
 
+/** "📍 Higgins Beach — from your photo" etc. for the upload sheet. */
+function locationLabel(snap, lat, lng, origin) {
+  const suffix = origin === 'exif' ? ' — from your photo'
+    : origin === 'user' ? ' — set by you' : '';
+  if (snap.tier === 'at') return `📍 ${snap.spot.n}${suffix}`;
+  if (snap.tier === 'near') return `📍 near ${snap.spot.n} (${snap.km.toFixed(1)} km)${suffix}`;
+  return `📍 ${lat.toFixed(4)}, ${lng.toFixed(4)}${suffix}`;
+}
+
 export async function openUploadSheet({ lat, lng }) {
   if (!(await apiAvailable())) return;
   const user = await ensureSignedIn();
   if (!user) return;
+  const spots = await loadNamedSpots();
 
   const sheet = document.getElementById('upload-sheet');
   const backdrop = document.getElementById('upload-backdrop');
@@ -84,6 +111,8 @@ export async function openUploadSheet({ lat, lng }) {
   const submit = document.getElementById('upload-submit');
   const status = document.getElementById('upload-status');
   const preview = document.getElementById('upload-preview');
+  const locLabel = document.getElementById('upload-location-label');
+  const locBtn = document.getElementById('upload-location-btn');
 
   sheet.hidden = false; backdrop.hidden = false;
   status.textContent = ''; preview.innerHTML = ''; submit.disabled = true;
@@ -91,26 +120,41 @@ export async function openUploadSheet({ lat, lng }) {
   document.getElementById('upload-caption').value = '';
 
   let pin = { lat, lng };
+  let locationConfirmed = false;   // EXIF GPS or an explicit pick — never silent
   let stampSource = 'manual';
-  let picked = null;   // {blob, contentType, kind}
+  let picked = null;               // {blob, contentType, kind}
 
-  // Mini-map for pin confirm (plain background — precision comes from context
-  // of where the user clicked; full basemap tiles are overkill here).
-  const mini = new maplibregl.Map({
-    container: 'upload-minimap',
-    style: { version: 8, sources: {}, layers: [{ id: 'bg', type: 'background', paint: { 'background-color': '#12203a' } }] },
-    center: [lng, lat], zoom: 9, attributionControl: false,
-  });
-  const marker = new maplibregl.Marker({ draggable: true, color: '#38bdf8' })
-    .setLngLat([lng, lat]).addTo(mini);
-  marker.on('dragend', () => {
-    const p = marker.getLngLat();
-    pin = { lat: p.lat, lng: p.lng };
-    stampSource = 'manual';
-    stampTag.textContent = 'location set by uploader';
-  });
+  const refreshLocationRow = (origin) => {
+    if (!locationConfirmed) {
+      locLabel.textContent = '📍 no location yet — set where this was taken';
+      locLabel.classList.add('upload-location-missing');
+      locBtn.textContent = 'set location';
+      return;
+    }
+    locLabel.classList.remove('upload-location-missing');
+    locLabel.textContent = locationLabel(snapToSpot(spots, pin.lat, pin.lng), pin.lat, pin.lng, origin);
+    locBtn.textContent = 'adjust';
+  };
+  refreshLocationRow();
 
-  const close = () => { sheet.hidden = true; backdrop.hidden = true; mini.remove(); };
+  const openPicker = async () => {
+    const res = await pickLocation({ lat: pin.lat, lng: pin.lng });
+    if (!res) return false;
+    pin = { lat: res.lat, lng: res.lng };
+    locationConfirmed = true;
+    if (stampSource === 'exif') {
+      stampSource = 'manual';                 // user overrode the EXIF pin
+      stampTag.textContent = 'location set by uploader';
+    } else if (picked) {
+      stampSource = 'manual';
+      stampTag.textContent = 'location set by uploader';
+    }
+    refreshLocationRow('user');
+    return true;
+  };
+  locBtn.onclick = openPicker;
+
+  const close = () => { sheet.hidden = true; backdrop.hidden = true; };
   document.getElementById('upload-close').onclick = close;
   backdrop.onclick = close;
 
@@ -148,9 +192,13 @@ export async function openUploadSheet({ lat, lng }) {
       preview.replaceChildren(v);
       stampSource = 'device';
       stampTag.textContent = 'user-reported time & place';
+      locationConfirmed = false;              // videos carry no EXIF → must pick
+      refreshLocationRow();
     } else {
-      // EXIF prefill from the ORIGINAL file (downscaling strips metadata)
-      const exif = await exifr.parse(file, { gps: true, pick: ['DateTimeOriginal', 'latitude', 'longitude'] }).catch(() => null);
+      // EXIF prefill from the ORIGINAL file (downscaling can strip metadata).
+      // NOTE: per-segment pick — a global pick: ['latitude'] drops the GPS
+      // block before exifr converts coordinates.
+      const exif = await exifr.parse(file, { exif: ['DateTimeOriginal'], gps: true }).catch(() => null);
       try {
         picked = { ...(await downscalePhoto(file)), kind: 'photo' };
       } catch {
@@ -161,15 +209,18 @@ export async function openUploadSheet({ lat, lng }) {
       img.src = URL.createObjectURL(picked.blob);
       preview.replaceChildren(img);
       if (exif && exif.latitude != null && exif.DateTimeOriginal) {
+        // ── Auto-assign: geotagged photo snaps to its spot ──
         pin = { lat: exif.latitude, lng: exif.longitude };
-        marker.setLngLat([pin.lng, pin.lat]);
-        mini.setCenter([pin.lng, pin.lat]);
+        locationConfirmed = true;
         setTime(new Date(exif.DateTimeOriginal));
         stampSource = 'exif';
-        stampTag.textContent = 'verified from photo — confirm the pin';
+        stampTag.textContent = 'verified from photo';
+        refreshLocationRow('exif');
       } else {
         stampSource = 'device';
-        stampTag.textContent = 'no photo metadata — confirm time & pin';
+        stampTag.textContent = 'no photo metadata — set time & location';
+        locationConfirmed = false;
+        refreshLocationRow();
       }
       submit.disabled = false;
     }
@@ -177,6 +228,10 @@ export async function openUploadSheet({ lat, lng }) {
 
   submit.onclick = async () => {
     if (!picked) return;
+    // Non-geotagged media must pass through the picker before upload.
+    if (!locationConfirmed) {
+      if (!(await openPicker())) { status.textContent = 'Set a location to upload.'; return; }
+    }
     submit.disabled = true;
     status.textContent = 'Uploading…';
     try {
@@ -252,7 +307,7 @@ export async function renderMediaStrip(container, lat, lng) {
       if (m.kind === 'video') { el.muted = true; el.preload = 'metadata'; }
       el.className = 'media-thumb';
       el.title = `${new Date(m.capturedAt).toLocaleString()} · ${m.stampSource === 'exif' ? 'verified' : 'user-reported'}`;
-      el.onclick = () => openLightbox(m);
+      el.onclick = () => openLightbox(m, window.__mediaTimelineCtx || null);
       return el;
     }));
   } catch {
@@ -263,7 +318,22 @@ export async function renderMediaStrip(container, lat, lng) {
   }
 }
 
-function openLightbox(m) {
+// ── Lightbox ──
+
+/** "2h before this frame" / "at this frame" relative to the timeline hour. */
+function relateToFrame(capturedMs, frameMs) {
+  const dh = (frameMs - capturedMs) / 3600e3;
+  if (Math.abs(dh) < 0.75) return 'at this frame';
+  const h = Math.round(Math.abs(dh));
+  const unit = h >= 48 ? `${Math.round(h / 24)}d` : `${h}h`;
+  return dh > 0 ? `${unit} before this frame` : `${unit} after this frame`;
+}
+
+/**
+ * Lightbox for a media item. `ctx` (optional) couples it to the forecast
+ * timeline: { runTime: Date, getHour(): number, jumpToHour(h): void }.
+ */
+export function openLightbox(m, ctx = null) {
   const wrap = document.createElement('div');
   wrap.className = 'media-lightbox';
   const media = document.createElement(m.kind === 'video' ? 'video' : 'img');
@@ -271,11 +341,44 @@ function openLightbox(m) {
   if (m.kind === 'video') { media.controls = true; media.autoplay = true; }
   const meta = document.createElement('div');
   meta.className = 'media-lightbox-meta';
+
   const when = new Date(m.capturedAt);
+  const whenStr = when.toLocaleString('en-US', {
+    weekday: 'short', hour: 'numeric', minute: '2-digit',
+  });
+
+  const spotLine = document.createElement('span');
+  spotLine.className = 'media-lightbox-spot';
+  spotLine.textContent = `📍 ${m.spotName || `${(+m.lat).toFixed(3)}, ${(+m.lng).toFixed(3)}`}`;
+
   const line1 = document.createElement('span');
-  line1.textContent = `${when.toLocaleString()} · ${m.stampSource === 'exif' ? '✓ verified capture data' : 'user-reported'}`;
+  const badge = m.stampSource === 'exif'
+    ? '<span class="media-badge media-badge-exif">✓ verified capture</span>'
+    : '<span class="media-badge">user-reported</span>';
+  let rel = '';
+  if (ctx && ctx.runTime) {
+    const frameMs = ctx.runTime.getTime() + ctx.getHour() * 3600e3;
+    rel = `, ${relateToFrame(when.getTime(), frameMs)}`;
+  }
+  line1.innerHTML = `${whenStr}${rel} ${badge}`;
+
   const line2 = document.createElement('span');
   line2.textContent = `@${m.handle}${m.caption ? ' — ' + m.caption : ''}`;
+
+  meta.append(spotLine, line1, line2);
+
+  if (ctx && ctx.runTime && ctx.jumpToHour) {
+    const jump = document.createElement('button');
+    jump.className = 'ctrl-btn media-jump';
+    jump.textContent = '⏱ jump timeline to this photo';
+    jump.onclick = () => {
+      const h = Math.round((when.getTime() - ctx.runTime.getTime()) / 3600e3 / 3) * 3;
+      ctx.jumpToHour(Math.max(0, Math.min(168, h)));
+      wrap.remove();
+    };
+    meta.append(jump);
+  }
+
   const report = document.createElement('button');
   report.className = 'media-report';
   report.textContent = 'report';
@@ -286,7 +389,7 @@ function openLightbox(m) {
     }).catch(() => {});
     report.textContent = 'reported ✓';
   };
-  meta.append(line1, line2, report);
+  meta.append(report);
   wrap.append(media, meta);
   wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
   document.body.appendChild(wrap);
