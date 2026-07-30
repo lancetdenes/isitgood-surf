@@ -17,7 +17,7 @@
  *   out: { id, ok: false, status?: number, aborted?: boolean, error?: string }
  */
 
-import { parseBinary } from './grid.js';
+import { parseBinary, buildGroundViewArrays } from './grid.js';
 
 const controllers = new Map(); // id -> AbortController
 
@@ -25,10 +25,17 @@ function decodeAndPost(id, buf, includeRaw) {
   const grid = parseBinary(buf);
   const header = { nx: grid.nx, ny: grid.ny, lo1: grid.lo1, la1: grid.la1, dx: grid.dx, dy: grid.dy };
   const buffers = grid.arrays.map(a => a.buffer);
+  // Swellpart grids (12 params) also get their groundswell view derived
+  // here, so scrubbing a partition layer never runs the 1M-cell pass on
+  // the main thread.
+  const ground = grid.arrays.length >= 12
+    ? buildGroundViewArrays(grid.arrays, grid.nx * grid.ny).map(a => a.buffer)
+    : null;
+  const transfers = ground ? [...buffers, ...ground] : buffers;
   if (includeRaw) {
-    self.postMessage({ id, ok: true, header, buffers, raw: buf }, [...buffers, buf]);
+    self.postMessage({ id, ok: true, header, buffers, ground, raw: buf }, [...transfers, buf]);
   } else {
-    self.postMessage({ id, ok: true, header, buffers }, buffers);
+    self.postMessage({ id, ok: true, header, buffers, ground }, transfers);
   }
 }
 

@@ -33,6 +33,12 @@
 import { Grid, parseBinary, loadGrid } from './grid.js';
 
 const DEFAULT_MAX_DECODED_BYTES = 300 * 1024 * 1024;
+
+// Raw-tier entries larger than this never decode synchronously on the main
+// thread — a 12-param swellpart file is ~25 MB of int16 and costs 40-80 ms
+// to decode, which is exactly the scrub jank the sync path must never cause.
+// Wind (~4 MB) and combined swell (~6 MB) stay comfortably under it.
+const SYNC_DECODE_MAX_BYTES = 16 * 1024 * 1024;
 // Sized to the 85-step (0–336h) timeline: a full real run's wind+swell int16
 // bytes are ~880 MB (was ~590 MB for the old 57-step / 168h horizon).
 const DEFAULT_MAX_RAW_BYTES = 1000 * 1024 * 1024;
@@ -81,6 +87,7 @@ export class GridStore {
     }
     const raw = this.rawCache.get(url);
     if (raw) {
+      if (raw.bytes > SYNC_DECODE_MAX_BYTES) return null; // worker's job
       this._touch(this.rawCache, url, raw);
       try {
         const grid = parseBinary(raw.buffer);
@@ -132,7 +139,8 @@ export class GridStore {
       if (negUntil > Date.now()) return Promise.resolve(null);
       this._negative.delete(url);
     }
-    if (this.rawCache.has(url) && priority < 0) {
+    const rawHit = this.rawCache.get(url);
+    if (rawHit && priority < 0 && rawHit.bytes <= SYNC_DECODE_MAX_BYTES) {
       return Promise.resolve(this.peek(url)); // sync decode from raw tier
     }
     let job = this._pending.get(url);
@@ -174,7 +182,10 @@ export class GridStore {
 
   _storeDecoded(url, grid) {
     if (this.cache.has(url)) return;
-    const bytes = grid.arrays.reduce((s, a) => s + a.byteLength, 0);
+    let bytes = grid.arrays.reduce((s, a) => s + a.byteLength, 0);
+    if (grid._groundView) {
+      bytes += grid._groundView.arrays.reduce((s, a) => s + a.byteLength, 0);
+    }
     this.cache.set(url, { grid, bytes });
     this.totalBytes += bytes;
     while (this.totalBytes > this.maxBytes && this.cache.size > 1) {
@@ -278,12 +289,16 @@ export class GridStore {
       return this._worker;
     }
     this._worker.onmessage = (e) => {
-      const { id, ok, header, buffers, raw, status, aborted } = e.data;
+      const { id, ok, header, buffers, ground, raw, status, aborted } = e.data;
       const job = this._workerJobs.get(id);
       if (!job) return;
       this._workerJobs.delete(id);
       if (ok) {
-        job.finish(new Grid(header, buffers.map(b => new Float32Array(b))), { raw: raw || null });
+        const grid = new Grid(header, buffers.map(b => new Float32Array(b)));
+        if (ground) {
+          grid._groundView = new Grid(header, ground.map(b => new Float32Array(b)));
+        }
+        job.finish(grid, { raw: raw || null });
       } else {
         job.finish(null, { status: status || 0, aborted: !!aborted });
       }

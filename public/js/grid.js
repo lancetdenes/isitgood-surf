@@ -324,11 +324,19 @@ function _headerOf(grid) {
  */
 export function deriveGroundswellGrid(partGrid, minH = 0.1) {
   if (partGrid._groundView) return partGrid._groundView;
-  const n = partGrid.nx * partGrid.ny;
+  const [h, d, p] = buildGroundViewArrays(partGrid.arrays, partGrid.nx * partGrid.ny, minH);
+  partGrid._groundView = new Grid(_headerOf(partGrid), [h, d, p]);
+  return partGrid._groundView;
+}
+
+/**
+ * Pure core of the groundswell view — also run inside the decode worker so
+ * the 1M-cell pass never lands on the main thread for full-size grids.
+ */
+export function buildGroundViewArrays(a, n, minH = 0.1) {
   const h = new Float32Array(n);
   const d = new Float32Array(n);
   const p = new Float32Array(n);
-  const a = partGrid.arrays;
   for (let i = 0; i < n; i++) {
     let bestP = 0, bestBase = -1;
     for (const base of SWELLPART_BASES.partitions) {
@@ -343,8 +351,7 @@ export function deriveGroundswellGrid(partGrid, minH = 0.1) {
       p[i] = a[bestBase + 2][i];
     }
   }
-  partGrid._groundView = new Grid(_headerOf(partGrid), [h, d, p]);
-  return partGrid._groundView;
+  return [h, d, p];
 }
 
 /** Windsea view: zero-copy — just re-points at the windsea param triple. */
