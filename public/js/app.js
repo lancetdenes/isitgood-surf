@@ -22,6 +22,7 @@ import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
 setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
 import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
+import { initBuoys, buoyFeatureAt, closeBuoyPanel } from './buoys.js';
 
 class App {
   constructor() {
@@ -68,6 +69,7 @@ class App {
       initUI(this);
       initPanel();
       initPumping(this);
+      initBuoys(this);
 
       // Load coastline data in background
       loadCoastline().catch(e => console.warn('Coastline load failed:', e));
@@ -268,8 +270,14 @@ class App {
   }
 
   async _onMapClick(e) {
+    // Buoy clicks are handled by the buoy layer — don't also open the
+    // rating panel underneath it.
+    if (buoyFeatureAt(e)) return;
+
     const { lng, lat } = e.lngLat;
     if (!this.dataPath) return;
+
+    closeBuoyPanel();
 
     if (this.marker) this.marker.remove();
     this.marker = new maplibregl.Marker({ color: '#a855f7' })
@@ -298,6 +306,7 @@ class App {
 }
 
 const app = new App();
+window.__app = app; // console/debug handle (used by the verify scripts too)
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');
