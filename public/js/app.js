@@ -142,24 +142,34 @@ class App {
     const seq = ++this._loadSeq;
 
     try {
-      const [windGrid, swellGrid] = await Promise.all([
+      const [windGrid, swellRes] = await Promise.all([
         this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`),
         this._loadSwellWithFallback(hour),
       ]);
 
       if (seq !== this._loadSeq) return;
 
-      if (windGrid) {
-        this.windGrid = windGrid;
-        this.wind.setGrid(windGrid);
-      }
-      if (swellGrid) {
-        this.swellGrid = swellGrid;
-        this.swell.setGrid(swellGrid);
-      }
+      // Always assign — a missing hour must clear the layer rather than
+      // silently keep the previous hour's field on screen labelled as this
+      // hour. The renderers and heatmap all handle a null grid.
+      this.windGrid = windGrid;
+      this.wind.setGrid(windGrid);
+      this.swellGrid = swellRes.grid;
+      this.swell.setGrid(swellRes.grid);
 
       this._updateVisibility();
-      setStatus(`f${fhr} loaded`);
+
+      // Status honesty: say exactly what is showing.
+      const missing = [];
+      if (!windGrid) missing.push('wind');
+      if (!swellRes.grid) missing.push('swell');
+      if (missing.length) {
+        setStatus(`f${fhr} — no ${missing.join('/')} data for this hour`);
+      } else if (swellRes.actualHour !== hour) {
+        setStatus(`f${fhr} loaded — swell showing f${String(swellRes.actualHour).padStart(3, '0')} (nearest available)`);
+      } else {
+        setStatus(`f${fhr} loaded`);
+      }
 
       // Preload next 2 hours immediately, all hours in background
       this._preload(hour);
@@ -197,20 +207,24 @@ class App {
     setTimeout(load, 2000);
   }
 
-  /** Try loading the exact swell hour; if missing, try the nearest ±3h step. */
+  /**
+   * Try loading the exact swell hour; if missing, try the nearest ±3h step.
+   * Returns { grid, actualHour } so callers can surface the substitution
+   * instead of silently labelling a neighboring hour's field as this hour.
+   */
   async _loadSwellWithFallback(hour) {
     const fhr = String(hour).padStart(3, '0');
     const grid = await this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
-    if (grid) return grid;
+    if (grid) return { grid, actualHour: hour };
 
     for (const offset of [3, -3, 6, -6]) {
       const nearby = hour + offset;
       if (nearby < 0) continue;
       const nearFhr = String(nearby).padStart(3, '0');
       const fallback = await this._cachedLoadGrid(`${this.dataPath}/swell_f${nearFhr}.bin`);
-      if (fallback) return fallback;
+      if (fallback) return { grid: fallback, actualHour: nearby };
     }
-    return null;
+    return { grid: null, actualHour: null };
   }
 
   _updateVisibility() {
