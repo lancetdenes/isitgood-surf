@@ -22,6 +22,7 @@ import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
 setKDBush(KDBush);
 import { initPanel, openPanel, isPanelOpen, syncPanelHour, updatePanelSpotName } from './panel.js';
 import { initPumping, onHourChanged, invalidatePumpingCache } from './pumping.js';
+import { initMediaMap, syncHour as syncMediaHour } from './media-map.js';
 
 class App {
   constructor() {
@@ -68,6 +69,8 @@ class App {
       initUI(this);
       initPanel();
       initPumping(this);
+      // Photos layer + upload FAB (self-hides when the media API is absent)
+      initMediaMap(this).catch(e => console.warn('Media map init failed:', e));
 
       // Load coastline data in background
       loadCoastline().catch(e => console.warn('Coastline load failed:', e));
@@ -111,6 +114,8 @@ class App {
 
       // Update timeline ticks with actual day names
       if (this._onRunTimeReady) this._onRunTimeReady(this.runTime);
+      // Photo markers rendered before runTime resolved need a re-sync
+      syncMediaHour();
 
       await this._loadHour(this.hour);
       setStatus(`${info.model.toUpperCase()} — ${info.run}`);
@@ -257,6 +262,7 @@ class App {
     this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
+    syncMediaHour();
   }
 
   /** Like setHour but returns a promise that resolves when grids are loaded */
@@ -265,6 +271,7 @@ class App {
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
+    syncMediaHour();
   }
 
   async _onMapClick(e) {
