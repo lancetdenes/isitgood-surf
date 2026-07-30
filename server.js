@@ -43,9 +43,26 @@ app.use('/data', express.static(DATA_DIR, {
 // Guarantees clients never see a partially-written run.
 const isPublishedRun = (d) => !d.endsWith('.tmp') && !d.endsWith('.old');
 
+// Input validation for path components. Express URL-decodes `%2F` inside a
+// single route parameter, so `:model` / `:run` would otherwise accept
+// `../../etc`-style traversal (verified: readdir of any readable directory).
+const ALLOWED_MODELS = new Set(['gfs', 'ecmwf', 'demo']);
+const isValidModel = (m) => ALLOWED_MODELS.has(m);
+const isValidRun = (r) => r === 'demo' || /^\d{8}_\d{2}z$/.test(r);
+
+// Resolve a client-supplied /data path and confirm it stays inside DATA_DIR.
+// Returns the absolute path, or null if it escapes (traversal) or is malformed.
+function resolveDataPath(dataPath) {
+  if (typeof dataPath !== 'string' || !dataPath.length) return null;
+  const resolved = path.resolve(__dirname, dataPath.replace(/^\//, ''));
+  if (resolved !== DATA_DIR && !resolved.startsWith(DATA_DIR + path.sep)) return null;
+  return resolved;
+}
+
 // --- API: list available model runs ---
 app.get('/api/runs/:model', (req, res) => {
   const model = req.params.model;
+  if (!isValidModel(model)) return res.status(400).json({ error: 'Invalid model' });
   const modelDir = path.join(DATA_DIR, model);
 
   if (!fs.existsSync(modelDir)) {
@@ -64,6 +81,7 @@ app.get('/api/runs/:model', (req, res) => {
 // --- API: metadata for a specific run ---
 app.get('/api/runs/:model/:run', (req, res) => {
   const { model, run } = req.params;
+  if (!isValidModel(model) || !isValidRun(run)) return res.status(400).json({ error: 'Invalid model or run' });
   const runDir = path.join(DATA_DIR, model, run);
 
   if (!fs.existsSync(runDir)) {
@@ -86,6 +104,7 @@ app.get('/api/runs/:model/:run', (req, res) => {
 // --- API: latest run redirect ---
 app.get('/api/latest/:model', (req, res) => {
   const model = req.params.model;
+  if (!isValidModel(model)) return res.status(400).json({ error: 'Invalid model' });
   const modelDir = path.join(DATA_DIR, model);
 
   if (!fs.existsSync(modelDir)) {
@@ -261,7 +280,8 @@ app.get('/api/forecast', async (req, res) => {
     return res.status(400).json({ error: 'Missing lat, lon, or path' });
   }
 
-  const runDir = path.join(__dirname, dataPath.replace(/^\//, ''));
+  const runDir = resolveDataPath(dataPath);
+  if (!runDir) return res.status(400).json({ error: 'Invalid path' });
   try { await fsPromises.access(runDir); } catch {
     return res.status(404).json({ error: 'Run not found' });
   }
