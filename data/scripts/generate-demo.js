@@ -5,12 +5,17 @@
  * so the app works out of the box without downloading real GRIB data.
  *
  * Run: node data/scripts/generate-demo.js
- * Output: data/demo/wind_f000.bin ... wind_f168.bin
- *         data/demo/swell_f000.bin ... swell_f168.bin
+ * Output: data/demo/wind_f000.bin ... wind_f336.bin
+ *         data/demo/swell_f000.bin ... swell_f336.bin
+ *         data/demo/points.bin (SCUB cube over all 85 hours)
+ *
+ * Hours follow the shared layout (0-168 @3h, 174-336 @6h) so the extended
+ * timeline is testable locally end-to-end.
  */
 
 const fs = require('fs');
 const path = require('path');
+const { FORECAST_HOURS } = require('./lib/forecast-hours');
 
 const DEMO_DIR = path.join(__dirname, '..', 'demo');
 
@@ -341,8 +346,7 @@ if (!fs.existsSync(DEMO_DIR)) {
   fs.mkdirSync(DEMO_DIR, { recursive: true });
 }
 
-const hours = [];
-for (let h = 0; h <= 168; h += 3) hours.push(h);
+const hours = [...FORECAST_HOURS]; // 0-168 @3h + 174-336 @6h (85 steps)
 
 for (const h of hours) {
   const fhr = String(h).padStart(3, '0');

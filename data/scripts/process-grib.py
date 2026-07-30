@@ -19,16 +19,42 @@ import sys
 import os
 import struct
 import glob
-import numpy as np
 
+try:
+    import numpy as np
+except ImportError:
+    np = None
+
+# xarray is only needed for GRIB decoding in main(). Import lazily-tolerant
+# so pure helpers (e.g. forecast_hours) stay unit-testable without the heavy
+# scientific stack installed; main() still hard-fails below when it's absent.
 try:
     import xarray as xr
 except ImportError:
-    print("Error: xarray is required. Install with: pip install xarray cfgrib eccodes")
-    sys.exit(1)
+    xr = None
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.dirname(SCRIPT_DIR)
+
+# ── Forecast-hour layout ──
+# 0–168h @ 3h (GFS core range), then 174–336h @ 6h (extended range,
+# days 7–14): 85 steps total.
+# MIRRORS — keep in sync when changing the hour layout:
+#   public/js/hours.js                     (browser ESM — source of truth)
+#   data/scripts/lib/forecast-hours.js     (CommonJS, pipeline + server)
+#   data/scripts/download-gfs.sh           (seq 0 3 168 / seq 174 6 336)
+# data/scripts/test/forecast-hours.test.js asserts the mirrors agree.
+BASE_END = 168
+BASE_STEP = 3
+EXT_START = 174
+EXT_END = 336
+EXT_STEP = 6
+
+
+def forecast_hours():
+    """All forecast hours: [0, 3, …, 168, 174, 180, …, 336] (85 steps)."""
+    return list(range(0, BASE_END + 1, BASE_STEP)) + \
+           list(range(EXT_START, EXT_END + 1, EXT_STEP))
 
 
 def _derive_scale(arr):
@@ -425,6 +451,10 @@ def build_cube(run_dir, cube_path, hours):
 
 
 def main():
+    if xr is None or np is None:
+        print("Error: xarray + numpy are required. Install with: pip install xarray cfgrib eccodes")
+        sys.exit(1)
+
     if len(sys.argv) < 2:
         print("Usage: python3 process-grib.py <model> [run_id]")
         print("  model: gfs or ecmwf")
@@ -454,8 +484,8 @@ def main():
     print()
 
     # Process all forecast hours: 0-168 at 3-hourly, then 174-336 at 6-hourly
-    # (6-hourly extended range covers days 7-14 for the "score next week" tab).
-    hours = list(range(0, 169, 3)) + list(range(174, 337, 6))
+    # (6-hourly extended range covers days 7-14, timeline + panel + pumping).
+    hours = forecast_hours()
     for fhr in hours:
         fhrp = f"{fhr:03d}"
         print(f"  f{fhrp}:")
@@ -489,11 +519,13 @@ def main():
                 print(f"    Skipping swell (no GRIB file)")
 
     # Build point-forecast cube from the per-hour grids we just wrote.
-    # Client panel clicks range-request this file instead of fetching all 57
-    # grids — two ~1 KB reads vs. the old ~1 GB.
+    # Client panel clicks range-request this file instead of fetching every
+    # grid — two ~1 KB reads vs. the old ~1 GB. Covers the full 85-hour
+    # horizon (0-336h); the SCUB header's explicit hour table carries the
+    # non-uniform 3h/6h spacing, so old clients keep decoding correctly.
     print()
     print(f"━━━ Building point cube ━━━")
-    cube_hours = list(range(0, 169, 3))  # 57 hours — matches panel's range
+    cube_hours = forecast_hours()  # 85 hours — full timeline horizon
     build_cube(out_dir, os.path.join(out_dir, 'points.bin'), cube_hours)
 
     print()

@@ -2,7 +2,10 @@
 # download-gfs.sh — Download GFS + GFS-Wave GRIB2 data from NOMADS
 #
 # Downloads surface wind (10m U/V) and wave data (height, direction, period)
-# for forecast hours 0-168 every 3 hours.
+# for forecast hours 0-168 every 3 hours, then 174-336 every 6 hours.
+#
+# Hour layout mirrors public/js/hours.js / data/scripts/lib/forecast-hours.js
+# — keep the seq ranges below in sync with those modules.
 #
 # Usage:
 #   bash data/scripts/download-gfs.sh              # downloads latest available run
@@ -67,7 +70,7 @@ fetch() {
   fi
 }
 
-# Forecast hours: 0 to 168 every 3 hours
+# Forecast hours: 0 to 168 every 3 hours (mirror of hours.js BASE range)
 HOURS=$(seq 0 3 168)
 TOTAL=$(echo "$HOURS" | wc -w | tr -d ' ')
 COUNT=0
@@ -97,6 +100,7 @@ for FHR in $HOURS; do
 done
 
 # ── Extended-range forecast: f174-f336 at 6-hourly steps (days 7-14) ──
+# (mirror of hours.js EXT range)
 EXT_HOURS=$(seq 174 6 336)
 EXT_TOTAL=$(echo "$EXT_HOURS" | wc -w | tr -d ' ')
 EXT_COUNT=0

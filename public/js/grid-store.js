@@ -7,9 +7,10 @@
  *       decoded  Float32 Grids ready to render (default 300 MB — holds a
  *                wide window of hours around the scrub cursor at real
  *                0.25° grid sizes, or several full runs of demo data)
- *       raw      original int16 file bytes (default 700 MB — holds an
- *                entire real run, ~590 MB), so the whole timeline stays
- *                local even when the decoded tier evicts
+ *       raw      original int16 file bytes (default 1000 MB — holds an
+ *                entire real 14-day run: 85 wind + 85 swell steps of the
+ *                shared FORECAST_HOURS timeline is ~880 MB), so the whole
+ *                timeline stays local even when the decoded tier evicts
  *     A decoded-tier miss that hits the raw tier never touches the network:
  *     urgent requests decode synchronously (~a few ms), background requests
  *     re-decode in the worker.
@@ -32,7 +33,9 @@
 import { Grid, parseBinary, loadGrid } from './grid.js';
 
 const DEFAULT_MAX_DECODED_BYTES = 300 * 1024 * 1024;
-const DEFAULT_MAX_RAW_BYTES = 700 * 1024 * 1024;
+// Sized to the 85-step (0–336h) timeline: a full real run's wind+swell int16
+// bytes are ~880 MB (was ~590 MB for the old 57-step / 168h horizon).
+const DEFAULT_MAX_RAW_BYTES = 1000 * 1024 * 1024;
 const TRANSIENT_NEG_TTL_MS = 15 * 1000;
 const PERMANENT_STATUSES = new Set([403, 404, 410]);
 

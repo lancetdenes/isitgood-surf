@@ -2,10 +2,12 @@
  * forecast.js — Point forecast reads from the run's SCUB cube via HTTP range
  * requests.
  *
- * The cube is one big file per run (~600 MB) laid out cell-major: every grid
- * cell's full 57-hour × 5-param int16 time series is contiguous. For a panel
- * click we fetch ~1 KB per bilinear neighbor row instead of the ~1 GB the old
- * "load all 114 grids" path required.
+ * The cube is one big file per run laid out cell-major: every grid cell's
+ * full nHours × 5-param int16 time series is contiguous (85 hours for
+ * current runs: 0-168h @3h + 174-336h @6h). For a panel click we fetch
+ * ~1 KB per bilinear neighbor row instead of the ~1 GB the old "load all
+ * grids" path required. The header carries an explicit hour table, so the
+ * non-uniform hour spacing needs no special handling here.
  *
  * See process-grib.py (build_cube) for the writer side and the SCUB format
  * layout it produces.
@@ -155,7 +157,7 @@ async function fetchRowPair(cubeUrl, meta, i0, j) {
 
 /**
  * Read the four bilinear neighbors for (lon, lat) from the cube and return
- * decoded 57-hour forecast entries.
+ * one decoded forecast entry per hour in the cube's hour table.
  */
 async function readPointForecast(cubeUrl, lon, lat) {
   const meta = await loadCubeMeta(cubeUrl);
@@ -271,7 +273,8 @@ async function readPointForecast(cubeUrl, lon, lat) {
 }
 
 /**
- * Compute the 7-day point forecast for a lat/lon.
+ * Compute the point forecast for a lat/lon over every hour in the run's
+ * cube (out to 14 days for current runs).
  *
  * @param {number} lat
  * @param {number} lon

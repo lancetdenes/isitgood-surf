@@ -14,7 +14,8 @@ import { WindRenderer } from './wind.js';
 import { SwellRenderer } from './swell.js';
 import { HeatmapRenderer } from './heatmap.js';
 import { GridStore } from './grid-store.js';
-import { initUI, updateLegendVisibility, setStatus } from './ui.js';
+import { initUI, updateLegendVisibility, setStatus, syncTimeline } from './ui.js';
+import { FORECAST_HOURS, hourToIndex } from './hours.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
 import { setKDBush } from './coastline-hires.js';
@@ -243,49 +244,70 @@ class App {
   }
 
   /**
-   * Enqueue every forecast hour, prioritized by distance from the current
-   * hour (slight forward bias — play/scrub usually moves forward). The
-   * store dedups: already-cached/pending URLs are a no-op apart from a
-   * possible priority bump, so calling this on every scrub tick is cheap
-   * and keeps the pool always working on the most useful frames.
+   * Enqueue every forecast hour (all 85 steps, 0–336h — the shared
+   * FORECAST_HOURS list, 3h core / 6h extended), prioritized by
+   * timeline-step distance from the current hour (slight forward bias —
+   * play/scrub usually moves forward). The store dedups: already-cached/
+   * pending URLs are a no-op apart from a possible priority bump, so
+   * calling this on every scrub tick is cheap and keeps the pool always
+   * working on the most useful frames.
    */
   _schedulePrefetch(centerHour) {
     if (!this.dataPath) return;
-    for (let h = 0; h <= 168; h += 3) {
-      const d = h - centerHour;
+    const ci = hourToIndex(centerHour);
+    for (let i = 0; i < FORECAST_HOURS.length; i++) {
+      const h = FORECAST_HOURS[i];
+      const d = i - ci;
       const priority = d >= 0 ? d : -d + 1;
       this._store.load(this._windUrl(h), priority);
       this._store.load(this._swellUrl(h), priority);
     }
   }
 
-  /** Nearest hour (by |Δh|) whose wind grid is already decoded, or null. */
+  /**
+   * Nearest hour (by timeline-step distance on the non-uniform axis) whose
+   * wind grid is already decoded, or null.
+   */
   _nearestCachedHour(hour) {
-    for (let d = 3; d <= 168; d += 3) {
-      for (const h of [hour - d, hour + d]) {
-        if (h < 0 || h > 168) continue;
-        if (this._store.has(this._windUrl(h))) return h;
+    const ci = hourToIndex(hour);
+    for (let d = 1; d < FORECAST_HOURS.length; d++) {
+      for (const i of [ci - d, ci + d]) {
+        if (i < 0 || i >= FORECAST_HOURS.length) continue;
+        if (this._store.has(this._windUrl(FORECAST_HOURS[i]))) return FORECAST_HOURS[i];
       }
     }
     return null;
   }
 
   /**
+   * The two timeline steps on either side of `hour`, in swap-in preference
+   * order. Uses the shared hours list so the 6-hourly extended range and
+   * the 168→174 cadence change are handled — never h±3 arithmetic.
+   */
+  _swellNeighborHours(hour) {
+    const ci = hourToIndex(hour);
+    const out = [];
+    for (const i of [ci + 1, ci - 1, ci + 2, ci - 2]) {
+      if (i < 0 || i >= FORECAST_HOURS.length) continue;
+      if (FORECAST_HOURS[i] !== hour) out.push(FORECAST_HOURS[i]);
+    }
+    return out;
+  }
+
+  /**
    * Synchronous, fully-resolved swell lookup for the instant scrub path.
    * Returns `{ grid, actualHour }` for the exact hour, or — ONLY when the
    * exact hour is negative-cached (known missing) — the nearest cached
-   * ±3/±6h neighbor, mirroring _loadSwellWithFallback (actualHour reveals
-   * the substitution so status can label it). Returns null when the answer
-   * can't be determined without the network (caller falls through to the
-   * async path).
+   * timeline-step neighbor, mirroring _loadSwellWithFallback (actualHour
+   * reveals the substitution so status can label it). Returns null when
+   * the answer can't be determined without the network (caller falls
+   * through to the async path).
    */
   _peekSwellResolved(hour) {
     const exact = this._store.peek(this._swellUrl(hour));
     if (exact) return { grid: exact, actualHour: hour };
     if (!this._store.isNegative(this._swellUrl(hour))) return null;
-    for (const offset of [3, -3, 6, -6]) {
-      const nearby = hour + offset;
-      if (nearby < 0 || nearby > 168) continue;
+    for (const nearby of this._swellNeighborHours(hour)) {
       const url = this._swellUrl(nearby);
       const fallback = this._store.peek(url);
       if (fallback) return { grid: fallback, actualHour: nearby };
@@ -296,17 +318,16 @@ class App {
   }
 
   /**
-   * Try loading the exact swell hour; if missing, try the nearest ±3h step.
-   * Returns { grid, actualHour } so callers can surface the substitution
-   * instead of silently labelling a neighboring hour's field as this hour.
+   * Try loading the exact swell hour; if missing, try the neighboring
+   * timeline steps (non-uniform axis aware). Returns { grid, actualHour }
+   * so callers can surface the substitution instead of silently labelling
+   * a neighboring hour's field as this hour.
    */
   async _loadSwellWithFallback(hour) {
     const grid = await this._store.load(this._swellUrl(hour), -1);
     if (grid) return { grid, actualHour: hour };
 
-    for (const offset of [3, -3, 6, -6]) {
-      const nearby = hour + offset;
-      if (nearby < 0) continue;
+    for (const nearby of this._swellNeighborHours(hour)) {
       const fallback = await this._store.load(this._swellUrl(nearby), -1);
       if (fallback) return { grid: fallback, actualHour: nearby };
     }
@@ -355,6 +376,7 @@ class App {
   setHour(hour) {
     this.hour = hour;
     this._loadHour(hour);
+    syncTimeline(hour, this.runTime);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
   }
@@ -362,6 +384,7 @@ class App {
   /** Like setHour but returns a promise that resolves when grids are loaded */
   async setHourAsync(hour) {
     this.hour = hour;
+    syncTimeline(hour, this.runTime);
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
