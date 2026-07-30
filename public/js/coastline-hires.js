@@ -33,6 +33,8 @@ export function _setHiresData(data) {
   _data = data;
   _index = buildIndex(data);
   _ready = true;
+  // Dev/measurement hook (see verify/measure.js)
+  if (typeof window !== 'undefined') window.__coastHiresReady = true;
 }
 
 /** @returns {boolean} */

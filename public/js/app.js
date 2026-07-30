@@ -160,6 +160,7 @@ class App {
 
       this._updateVisibility();
       setStatus(`f${fhr} loaded`);
+      (window.__perfLog ||= []).push({ t: performance.now(), type: 'hour-applied', hour });
 
       // Preload next 2 hours immediately, all hours in background
       this._preload(hour);
@@ -298,6 +299,8 @@ class App {
 }
 
 const app = new App();
+// Dev/measurement hook — used by verify/measure.js (Playwright harness).
+window.__app = app;
 app.init().catch(err => {
   console.error('App init failed:', err);
   setStatus('Initialization error — check console');

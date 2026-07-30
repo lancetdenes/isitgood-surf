@@ -196,6 +196,7 @@ export class HeatmapRenderer {
 
   _render() {
     if (!this.visible || !this.grid || !this._layerReady) return;
+    const _t0 = performance.now();
 
     const bounds = this.map.getBounds();
     const west = bounds.getWest();
@@ -265,6 +266,7 @@ export class HeatmapRenderer {
     }
 
     this._ctx.putImageData(this._imgData, 0, 0);
+    (window.__perfLog ||= []).push({ t: performance.now(), type: 'heatmap-render', dur: performance.now() - _t0 });
 
     // Encode asynchronously (toBlob) instead of blocking the main thread with
     // toDataURL — during timeline scrubbing the sync PNG encode was a major
@@ -278,6 +280,7 @@ export class HeatmapRenderer {
           url,
           coordinates: boundsToCoords(bounds),
         });
+        (window.__perfLog ||= []).push({ t: performance.now(), type: 'heatmap-frame' });
       } catch (e) {
         // Source not ready yet
       }
