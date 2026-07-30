@@ -5,6 +5,8 @@
  * wind speed (scaled to the map zoom) with very short, fast-fading trails.
  */
 
+import { makeFrameProjector } from './fast-project.js';
+
 export class WindRenderer {
   constructor(canvas, map) {
     this.canvas = canvas;
@@ -164,6 +166,11 @@ export class WindRenderer {
 
     const frameSpeed = this.speed * speedZoom;
 
+    // One calibrated projector per frame — avoids a map.project +
+    // map.unproject (matrix math + allocations) per particle.
+    const proj = makeFrameProjector(this.map);
+    const pt = { x: 0, y: 0 };
+
     for (const p of this.particles) {
       const wind = this.grid.interpolate(p.lng, p.lat);
       if (!wind) {
@@ -191,18 +198,18 @@ export class WindRenderer {
       const ny = v / speed;
       const step = frameSpeed * Math.max(0.15, Math.min(speed / 10, 2.2));
 
-      const pt0 = this.map.project([p.lng, p.lat]);
-      const px1 = pt0.x + nx * step;
-      const py1 = pt0.y - ny * step;
+      proj.project(p.lng, p.lat, pt);
+      const px0 = pt.x;
+      const py0 = pt.y;
+      const px1 = px0 + nx * step;
+      const py1 = py0 - ny * step;
 
-      // Unproject back to geo
-      const geo1 = this.map.unproject([px1, py1]);
-      p.lng = geo1.lng;
-      p.lat = geo1.lat;
+      // Unproject back to geo (writes p.lng / p.lat in place)
+      proj.unproject(px1, py1, p);
       p.age++;
 
       // Draw dash
-      ctx.moveTo(pt0.x, pt0.y);
+      ctx.moveTo(px0, py0);
       ctx.lineTo(px1, py1);
 
       // Reset if expired or off-screen
