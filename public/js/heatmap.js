@@ -208,7 +208,14 @@ export class HeatmapRenderer {
       this._pushFrame(null);
       return;
     }
-    this._renderSoon();
+    // Data changes render synchronously — the draw is ~1-3ms with warm
+    // sample tables, and skipping the extra animation-frame hop keeps a
+    // scrub tick's visual update inside the same frame as the input.
+    if (this._renderRaf) {
+      cancelAnimationFrame(this._renderRaf);
+      this._renderRaf = null;
+    }
+    if (this.visible && this.grid && this._layerReady) this._render();
   }
 
   setMode(mode) {
