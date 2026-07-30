@@ -5,6 +5,9 @@
   "installCommand": null,
   "outputDirectory": "public",
   "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/buoys/:kind", "destination": "/api/buoys?kind=:kind" }
+  ],
   "headers": [
     {
       "source": "/(.*)",

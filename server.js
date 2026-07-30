@@ -413,16 +413,20 @@ if (!process.env.NDBC_FIXTURE_DIR) {
   process.env.NDBC_FIXTURE_DIR = path.join(__dirname, 'api', '_lib', 'test', 'fixtures', 'ndbc');
 }
 
-const buoyHandlers = {}; // name -> handler (lazy ESM import, CommonJS host)
-function buoyRoute(name) {
+let buoyHandler = null; // lazy ESM import, CommonJS host
+function buoyRoute(kind) {
   return async (req, res) => {
     try {
-      if (!buoyHandlers[name]) {
-        buoyHandlers[name] = (await import(`./api/buoys/${name}.mjs`)).default;
+      if (!buoyHandler) {
+        buoyHandler = (await import('./api/buoys.mjs')).default;
       }
-      await buoyHandlers[name](req, res);
+      // Express 5's req.query is a getter — overlay it rather than mutate.
+      const shim = Object.create(req, {
+        query: { value: { ...req.query, kind }, enumerable: true },
+      });
+      await buoyHandler(shim, res);
     } catch (err) {
-      console.error(`buoys/${name} failed:`, err);
+      console.error(`buoys/${kind} failed:`, err);
       res.status(500).json({ error: 'internal' });
     }
   };
