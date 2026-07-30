@@ -105,6 +105,60 @@ export class Grid {
   }
 
   /**
+   * Coastal variant of interpolateSwell: instead of rejecting the whole cell
+   * when a corner is land (or lacks this swell train), it drops those corners
+   * and renormalizes the bilinear weights over the remaining ones — the same
+   * approach forecast.js uses for panel point reads. A spot click lands in a
+   * half-land cell almost by definition, so the strict rule would return
+   * null exactly where the answer matters.
+   *
+   * Returns { height, direction, period } or null when no corner qualifies
+   * (fully inland / train absent) or the point is off-grid.
+   */
+  interpolateSwellCoastal(lon, lat, minH = 0.05, base = 0) {
+    let fi = (lon - this.lo1) / this.dx;
+    const fj = (this.la1 - lat) / this.dy;
+    while (fi < 0) fi += this.nx;
+    while (fi >= this.nx) fi -= this.nx;
+    if (fj < 0 || fj >= this.ny - 1) return null;
+
+    const i0 = Math.floor(fi);
+    const j0 = Math.floor(fj);
+    const fx = fi - i0;
+    const fy = fj - j0;
+    const i1 = (i0 + 1) % this.nx;
+    const j1 = Math.min(j0 + 1, this.ny - 1);
+
+    const idxs = [j0 * this.nx + i0, j0 * this.nx + i1, j1 * this.nx + i0, j1 * this.nx + i1];
+    const ws = [(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy];
+
+    const h = this.arrays[base];
+    const d = this.arrays[base + 1];
+    const p = this.arrays[base + 2];
+
+    let wSum = 0;
+    for (let k = 0; k < 4; k++) {
+      if (h[idxs[k]] < minH) ws[k] = 0;
+      wSum += ws[k];
+    }
+    if (wSum <= 0) return null;
+
+    const TO_RAD = Math.PI / 180, TO_DEG = 180 / Math.PI;
+    let height = 0, period = 0, sinSum = 0, cosSum = 0;
+    for (let k = 0; k < 4; k++) {
+      if (ws[k] === 0) continue;
+      const w = ws[k] / wSum;
+      const idx = idxs[k];
+      height += w * h[idx];
+      period += w * p[idx];
+      sinSum += w * Math.sin(d[idx] * TO_RAD);
+      cosSum += w * Math.cos(d[idx] * TO_RAD);
+    }
+    const direction = (Math.atan2(sinSum, cosSum) * TO_DEG + 360) % 360;
+    return { height, direction, period };
+  }
+
+  /**
    * Height-only variant of interpolateSwell for per-pixel rendering.
    * Skips the direction (4× sin/cos + atan2) and period math — the heatmap
    * only needs height, and this runs for every pixel of the raster.
