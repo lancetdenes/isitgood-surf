@@ -2,7 +2,8 @@
  * panel.js — Surf rating sidebar panel
  *
  * Renders the full rating panel: overall score, compass diagram,
- * hourly scroll with mini compasses, and 7-day outlook.
+ * hourly scroll with mini compasses, and 14-day outlook (days 8-14 come
+ * from the GFS extended range and are flagged as lower-confidence).
  */
 
 import {
@@ -14,6 +15,7 @@ import { findNearestCoast, reverseGeocode, getCoastSnippet } from './coastline.j
 import { renderCompass as renderCompassSvg } from './compass-render.js';
 import { renderMapCompassHTML, mountMapCompass, unmountAllMapCompasses } from './compass-map.js';
 import { renderMediaStrip } from './media.js';
+import { BASE_END } from './hours.js';
 
 // ── State ──
 
@@ -89,8 +91,9 @@ function _selectClosestHour(targetHour) {
 // ── Build forecast data via server API ──
 
 /**
- * Build the full 7-day forecast for a point via the server-side API.
- * One request returns all hours — much faster than loading 57+ grid files.
+ * Build the full forecast (out to 14 days) for a point from the run's SCUB
+ * cube. One pair of range requests returns all hours — much faster than
+ * loading 85 grid files.
  */
 export async function openPanel(lat, lon, coast, dataPath, runTime, currentHour = 0, cachedLoad = null) {
   panelEl.classList.add('open');
@@ -348,8 +351,16 @@ function renderHourly(day, coast) {
 }
 
 function renderDaily(days, coast) {
+  // A day is "extended" when its data comes from the lower-confidence
+  // 6-hourly GFS range beyond 168h. The divider goes before the first one.
+  const firstExtIdx = days.findIndex(d => d.hours[0].hour > BASE_END);
+
   const rows = days.map((day, dayIdx) => {
+    const isExt = firstExtIdx >= 0 && dayIdx >= firstExtIdx;
     const sel = dayIdx === selectedDayIdx ? 'rp-day-sel' : '';
+    const divider = dayIdx === firstExtIdx
+      ? `<div class="rp-ext-divider"><span>extended · lower confidence</span></div>`
+      : '';
 
     // Get AM (first hour), Noon (middle), PM (last) entries
     const am = day.hours[0];
@@ -370,7 +381,8 @@ function renderDaily(days, coast) {
     const bestSwell = day.hours.reduce((best, h) => h.swellHeightFt > best.swellHeightFt ? h : best, day.hours[0]);
 
     return `
-      <div class="rp-day ${sel}" data-day-idx="${dayIdx}">
+      ${divider}
+      <div class="rp-day ${sel} ${isExt ? 'rp-day-ext' : ''}" data-day-idx="${dayIdx}">
         <div>
           <div class="rp-day-name">${day.dayName}</div>
           <div class="rp-day-date">${day.date}</div>
@@ -386,9 +398,13 @@ function renderDaily(days, coast) {
     `;
   }).join('');
 
+  // Days 8-14 exist whenever the run's cube covers the extended range;
+  // fall back to the old label when it doesn't (older runs).
+  const title = firstExtIdx >= 0 || days.length > 8 ? '14-Day Outlook' : '7-Day Outlook';
+
   return `
     <div class="rp-daily">
-      <div class="rp-sec-title">7-Day Outlook</div>
+      <div class="rp-sec-title">${title}</div>
       <div class="rp-day-labels">
         <div></div><div></div><div></div><div></div><div></div>
         <div class="rp-day-col-label">AM</div>

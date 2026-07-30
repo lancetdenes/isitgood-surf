@@ -60,7 +60,11 @@
       </svg>
     </button>
     <div class="timeline-track">
-      <input type="range" id="hour-slider" min="0" max="168" step="3" value="0">
+      <!-- Index-based slider over the non-uniform hour list in js/hours.js
+           (0-168h @3h then 174-336h @6h). min/max are re-asserted from
+           N_STEPS at init in ui.js; 84 = last index of the 85-step list. -->
+      <input type="range" id="hour-slider" min="0" max="84" step="1" value="0">
+      <div class="timeline-ext-label" id="timeline-ext-label" aria-hidden="true">extended</div>
       <div class="timeline-ticks" id="timeline-ticks"></div>
     </div>
     <div class="hour-display" id="hour-display">

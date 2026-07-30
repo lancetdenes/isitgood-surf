@@ -10,6 +10,8 @@
  *   invalidatePumpingCache
  */
 
+import { baseHours, extendedHours } from './hours.js';
+
 const TO_RAD = Math.PI / 180;
 const TO_DEG = 180 / Math.PI;
 
@@ -367,12 +369,8 @@ async function renderCurrentMode() {
 }
 
 function hourRangeFor(mode) {
-  if (mode === 'week') return Array.from({ length: 57 }, (_, i) => i * 3);
-  if (mode === 'next') {
-    const arr = [];
-    for (let h = 174; h <= 336; h += 6) arr.push(h);
-    return arr;
-  }
+  if (mode === 'week') return baseHours();       // 0-168h @3h
+  if (mode === 'next') return extendedHours();   // 174-336h @6h
   return [];
 }
 

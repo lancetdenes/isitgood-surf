@@ -14,7 +14,8 @@ import { WindRenderer } from './wind.js';
 import { SwellRenderer } from './swell.js';
 import { HeatmapRenderer } from './heatmap.js';
 import { loadGrid } from './grid.js';
-import { initUI, updateLegendVisibility, setStatus } from './ui.js';
+import { initUI, updateLegendVisibility, setStatus, syncTimeline } from './ui.js';
+import { FORECAST_HOURS, hourToIndex } from './hours.js';
 import { loadCoastline, findNearestCoast, reverseGeocode } from './coastline.js';
 import KDBush from '/vendor/kdbush/index.js';
 import { setKDBush, loadHiresCoastline } from './coastline-hires.js';
@@ -170,23 +171,23 @@ class App {
     }
   }
 
-  /** Preload upcoming hours so animation/scrubbing is instant */
+  /** Preload the next two forecast steps so animation/scrubbing is instant.
+   *  Step size follows the shared hours list (3h core, 6h extended). */
   _preload(currentHour) {
-    for (const offset of [3, 6]) {
-      const h = currentHour + offset;
-      if (h > 168) continue;
+    const idx = hourToIndex(currentHour);
+    for (const h of FORECAST_HOURS.slice(idx + 1, idx + 3)) {
       const fhr = String(h).padStart(3, '0');
       this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`);
       this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
     }
   }
 
-  /** Preload ALL hours in background (called after first load) */
+  /** Preload ALL hours (0-336h) in background (called after first load) */
   _preloadAll() {
     if (this._preloadStarted || !this.dataPath) return;
     this._preloadStarted = true;
     const load = async () => {
-      for (let h = 0; h <= 168; h += 3) {
+      for (const h of FORECAST_HOURS) {
         const fhr = String(h).padStart(3, '0');
         await this._cachedLoadGrid(`${this.dataPath}/wind_f${fhr}.bin`);
         await this._cachedLoadGrid(`${this.dataPath}/swell_f${fhr}.bin`);
@@ -255,6 +256,7 @@ class App {
   setHour(hour) {
     this.hour = hour;
     this._loadHour(hour);
+    syncTimeline(hour, this.runTime);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
   }
@@ -262,6 +264,7 @@ class App {
   /** Like setHour but returns a promise that resolves when grids are loaded */
   async setHourAsync(hour) {
     this.hour = hour;
+    syncTimeline(hour, this.runTime);
     await this._loadHour(hour);
     if (isPanelOpen()) syncPanelHour(hour);
     onHourChanged();
