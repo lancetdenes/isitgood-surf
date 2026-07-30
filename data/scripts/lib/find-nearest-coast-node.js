@@ -3,10 +3,11 @@
  *
  * Differences:
  *   - No fetch — caller passes a parsed binary + a pre-built kdbush
- *   - No grid validation (build-time has no swell grid); seaward defaults to
- *     (coastBearing + 90) % 360 — production runtime that loads coast-points.json
- *     can recompute via findNearestCoastHires with a grid if higher accuracy
- *     is needed for a specific spot.
+ *   - Grid validation is optional: pass a swell grid (anything with isWet)
+ *     as the 5th argument and the seaward direction is wet-tested via
+ *     validateSeaward — flipped when the polygon-winding guess faces land,
+ *     and flagged `bothFailed` when neither direction reaches ocean.
+ *     Without a grid, seaward defaults to (coastBearing + 90) % 360.
  *
  * Used by build-coast-points-hires.js and downstream tooling that needs to
  * compute coast bearings against the GSHHG hires binary in Node.
@@ -73,9 +74,10 @@ export function buildIndex(KDBush, data) {
  * @param {KDBush} idx     KDBush built via buildIndex above
  * @param {number} lat
  * @param {number} lon
- * @returns {{coastBearing,seawardDir,offshoreDir,distance,coastLat,coastLon,featureIdx,segIdx,unreliableBearing}}
+ * @param {object|null} grid  optional swell grid (needs isWet) for seaward validation
+ * @returns {{coastBearing,seawardDir,offshoreDir,distance,coastLat,coastLon,featureIdx,segIdx,unreliableBearing,seawardFlipped,bothFailed}}
  */
-export function findNearestCoastNode(data, idx, lat, lon) {
+export function findNearestCoastNode(data, idx, lat, lon, grid = null) {
   const lon360 = to360(lon);
   const cosLat = Math.max(0.1, Math.cos(lat * Math.PI / 180));
   const lonR = Math.min(5, SEARCH_RADIUS_DEG / cosLat);
@@ -118,10 +120,16 @@ export function findNearestCoastNode(data, idx, lat, lon) {
     return [to180(vL), vLa];
   };
   const coastBearing = computeAdaptiveBearing(getVertex, c.f, c.s);
-  const seawardDir = (coastBearing + 90) % 360;
+  const assumedSeaward = (coastBearing + 90) % 360;
+  // Wet-test the polygon-winding guess against the swell grid (when given):
+  // ~14% of GSHHG-walked points otherwise face inland.
+  const { seawardDir, seawardFlipped, bothFailed } = validateSeaward(
+    grid, c.pt[0], c.pt[1], assumedSeaward
+  );
   return {
     coastBearing, seawardDir, offshoreDir: (seawardDir + 180) % 360,
     distance: c.d, coastLat: c.pt[0], coastLon: c.pt[1],
     featureIdx: c.f, segIdx: c.s, unreliableBearing: false,
+    seawardFlipped, bothFailed,
   };
 }
